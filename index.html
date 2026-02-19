@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Response Indexed Opening Explorer</title>
+
+<!-- Chessboard.js CSS -->
+<link rel="stylesheet" href="./js/chessboard.css" />
+
+<style>
+    #board { width: 400px; margin-bottom: 20px; }
+    #eval-bar-container { width: 20px; height: 200px; background: #ccc; display: inline-block; vertical-align: top; margin-left: 20px; }
+    #eval-bar { width: 100%; background: green; height: 50%; transition: height 0.3s; }
+    #white-move-select { margin-top: 10px; }
+</style>
+
+
+</head>
+<body>
+<h2>Response Indexed Explorer</h2>
+<div id="board"></div>
+<div id="eval-bar-container">
+    <div id="eval-bar"></div>
+</div>
+<select id="white-move-select"></select>
+
+<!-- Your ES module scripts -->
+<!-- <link rel="stylesheet" href="./js/chessboard.css"> -->
+
+<script src="./js/jquery.js"></script>
+<script src="./js/chessboard.js"></script>
+
+<script type="module" src="./js/app.js"></script>
+
+</body>
+</html>

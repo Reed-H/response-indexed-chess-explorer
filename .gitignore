@@ -1,0 +1,15 @@
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Node (if you add later)
+node_modules/
+
+# Logs
+*.log
+
+# VSCode
+.vscode/
+
+# Mac
+.DS_Store
