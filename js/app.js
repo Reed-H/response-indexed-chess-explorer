@@ -19,7 +19,8 @@ const board = Chessboard("board", {
 
 // Normalize evaluation for side to move
 function normalizeEval(score, fen) {
-    return fen.split(' ')[1] === 'b' ? -score : score;
+    const sideToMove = fen.split(' ')[1];
+    return sideToMove === 'w' ? score : -score;
 }
 
 // Render vertical eval bar
@@ -34,12 +35,19 @@ function evaluateWhiteMove(moveSan) {
     const fenAfter = getFenAfterMove(game.fen(), moveSan);
     if (!fenAfter) return;
 
-    engine.evaluate(fenAfter, 15, (rawScore) => {
+    console.log("Evaluating move:", moveSan);
+    console.log("FEN after move:", fenAfter);
+
+    engine.evaluate(fenAfter, 10, (rawScore) => {
         const score = normalizeEval(rawScore, fenAfter);
+
+        console.log("Normalized score:", score);
+
         renderEvalBar(score);
         board.position(fenAfter);
     });
 }
+
 
 // Populate dropdown with top N white moves
 async function populateWhiteMoves(limit = 5) {
@@ -56,6 +64,10 @@ async function populateWhiteMoves(limit = 5) {
                 resolve();
             });
         });
+        console.log("Current game FEN:", game.fen());
+        const moves = game.moves({ verbose: true });
+        console.log("Moves generated:", moves.map(m => m.san));
+
     }
 
     evaluations.sort((a, b) => b.score - a.score);
@@ -69,6 +81,8 @@ async function populateWhiteMoves(limit = 5) {
     });
 
     if (topMoves.length > 0) evaluateWhiteMove(topMoves[0].san);
+    console.log("Legal white moves:", moves.map(m => m.san));
+    console.log("Top moves:", topMoves);
 }
 
 // Event listener
