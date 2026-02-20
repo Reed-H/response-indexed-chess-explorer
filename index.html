@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>Response Indexed Opening Explorer</title>
     
-    <!-- External Stylesheets -->
     <link rel="stylesheet" href="./js/chessboard.css" />
     <link rel="stylesheet" href="./css/explorer.css" />
 </head>
@@ -27,11 +26,39 @@
         </div>
     </div>
 
-    <!-- Script Dependencies -->
+    <!-- Controls Section for Adding Variations -->
+    <div id="controls-section">
+        <h3>Add Variation</h3>
+        
+        <div class="input-group">
+            <label for="move-select">Black's Move:</label>
+            <select id="move-select">
+                <option value="">-- Select Move --</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="white-response-input">White's Strategy Label:</label>
+            <input 
+                type="text" 
+                id="white-response-input" 
+                placeholder="e.g., Solid Defense, Aggressive Attack, Main Line"
+                maxlength="50"
+            />
+        </div>
+
+        <div class="input-group">
+            <button id="add-variation-btn" class="btn btn-primary">Add Variation</button>
+            <button id="back-btn" class="btn btn-secondary">← Back</button>
+            <button id="export-btn" class="btn btn-secondary">Export Tree (JSON)</button>
+        </div>
+
+        <div id="status-message" class="status-message"></div>
+    </div>
+
     <script src="./js/jquery.js"></script>
     <script src="./js/chessboard.js"></script>
     
-    <!-- Main Application -->
     <script type="module" src="./js/app-multi-node.js"></script>
 </body>
 </html>

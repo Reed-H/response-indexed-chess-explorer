@@ -6,14 +6,17 @@ import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/esm/ches
 const engine = new Engine();
 const treeManager = new TreeManager(START_FEN);
 
-const board = Chessboard("board", {
-    position: START_FEN,
-    draggable: false
-});
-
+// DOM Elements
+const board = Chessboard("board", { position: START_FEN, draggable: false });
 const evalBar = document.getElementById('eval-bar');
 const variationsContainer = document.getElementById('variations-container');
 const breadcrumb = document.getElementById('breadcrumb');
+const moveSelect = document.getElementById('move-select');
+const whiteResponseInput = document.getElementById('white-response-input');
+const addVariationBtn = document.getElementById('add-variation-btn');
+const backBtn = document.getElementById('back-btn');
+const exportBtn = document.getElementById('export-btn');
+const statusMessage = document.getElementById('status-message');
 
 // Normalize evaluation for side to move
 function normalizeEval(score, fen) {
@@ -21,15 +24,25 @@ function normalizeEval(score, fen) {
     return sideToMove === 'w' ? score : -score;
 }
 
-// Render evaluation bar
+// Update eval bar
 function renderEvalBar(score) {
     const clamped = Math.max(-5, Math.min(5, score));
     const percent = 50 + clamped * 10;
     evalBar.style.height = percent + '%';
-    evalBar.style.background = score > 0 ? '#4CAF50' : '#f44336';
+    
+    if (score > 0.5) {
+        evalBar.classList.add('white-advantage');
+        evalBar.classList.remove('black-advantage', 'equal');
+    } else if (score < -0.5) {
+        evalBar.classList.add('black-advantage');
+        evalBar.classList.remove('white-advantage', 'equal');
+    } else {
+        evalBar.classList.add('equal');
+        evalBar.classList.remove('white-advantage', 'black-advantage');
+    }
 }
 
-// Update the main board display
+// Update board display
 function updateBoard(fen) {
     board.position(fen);
 }
@@ -38,13 +51,15 @@ function updateBoard(fen) {
 function renderBreadcrumb() {
     const path = treeManager.getCurrentPath();
     const breadcrumbHtml = path.map((node, idx) => {
-        if (idx === 0) return '<span>Start</span>';
-        return `<span> > ${node.move.san} (${node.eval !== null ? node.eval.toFixed(2) : '?'})</span>`;
+        if (idx === 0) return '<span class="breadcrumb-item">Start</span>';
+        const evalStr = node.eval !== null ? ` (${node.eval.toFixed(2)})` : '';
+        const responseStr = node.whiteResponse ? ` | ${node.whiteResponse}` : '';
+        return `<span class="breadcrumb-item"> > ${node.move.san}${evalStr}${responseStr}</span>`;
     }).join('');
     breadcrumb.innerHTML = breadcrumbHtml;
 }
 
-// Evaluate and set score on node
+// Evaluate node if not already evaluated
 function evaluateNode(node) {
     return new Promise(resolve => {
         if (node.eval !== null) {
@@ -60,17 +75,29 @@ function evaluateNode(node) {
     });
 }
 
-// Render variation tree at current position
+// Populate move selector with legal moves
+function updateMoveSelector() {
+    moveSelect.innerHTML = '<option value="">-- Select Move --</option>';
+    const legalMoves = treeManager.getLegalMoves();
+    
+    legalMoves.forEach(move => {
+        const option = document.createElement('option');
+        option.value = move.san;
+        option.textContent = move.san;
+        moveSelect.appendChild(option);
+    });
+}
+
+// Render variations grouped by white response
 async function renderVariations() {
     variationsContainer.innerHTML = '';
-    
     const children = treeManager.currentNode.children;
+    
     if (children.length === 0) {
-        variationsContainer.innerHTML = '<p><em>No variations yet</em></p>';
+        variationsContainer.innerHTML = '<p><em>No variations added yet. Use the controls below.</em></p>';
         return;
     }
 
-    // Group children by white response
     const grouped = treeManager.getChildrenGroupedByResponse();
 
     for (const [whiteResponse, nodes] of Object.entries(grouped)) {
@@ -78,7 +105,7 @@ async function renderVariations() {
         group.className = 'variation-group';
         
         const title = document.createElement('h4');
-        title.textContent = whiteResponse === 'ungrouped' ? 'Unclassified' : `White plays: ${whiteResponse}`;
+        title.textContent = whiteResponse;
         group.appendChild(title);
 
         for (const node of nodes) {
@@ -88,9 +115,11 @@ async function renderVariations() {
             let displayText = node.move.san;
             if (node.eval !== null) {
                 displayText += ` (${node.eval.toFixed(2)})`;
+            } else {
+                displayText += ' (?)';
             }
             
-            nodeBtn.innerHTML = displayText;
+            nodeBtn.textContent = displayText;
             nodeBtn.onclick = () => navigateToNode(node);
             
             group.appendChild(nodeBtn);
@@ -99,53 +128,136 @@ async function renderVariations() {
         variationsContainer.appendChild(group);
     }
 
-    // Evaluate all children
+    // Auto-evaluate all children
     for (const child of children) {
         await evaluateNode(child);
     }
     
-    // Re-render with evaluations
-    renderVariations();
+    // Re-render to show evaluations
+    await renderVariations();
 }
 
 // Navigate to a node
 async function navigateToNode(node) {
-    const fen = treeManager.navigateToNode(node);
-    updateBoard(fen);
+    treeManager.navigateToNode(node);
+    updateBoard(node.fen);
     renderBreadcrumb();
     
-    // Evaluate current position
     await evaluateNode(node);
     renderEvalBar(node.eval);
     
-    // Render child variations
+    updateMoveSelector();
     await renderVariations();
-}
-
-// Create a new child node
-async function createVariation(moveSan, whiteResponse = null) {
-    const newNode = treeManager.createChildNode(moveSan, whiteResponse);
-    if (!newNode) return false;
-
-    // Evaluate immediately
-    await evaluateNode(newNode);
     
-    // Refresh display
-    await renderVariations();
-    return true;
+    showStatus(`Navigated to ${node.move.san}`);
 }
+
+// Add a new variation
+async function addVariation() {
+    const moveSan = moveSelect.value;
+    const whiteResponse = whiteResponseInput.value.trim();
+
+    if (!moveSan) {
+        showStatus('Please select a move', 'error');
+        return;
+    }
+
+    if (!whiteResponse) {
+        showStatus('Please enter a white strategy label', 'error');
+        return;
+    }
+
+    const newNode = treeManager.createChildNode(moveSan, whiteResponse);
+    
+    if (!newNode) {
+        showStatus('Invalid move', 'error');
+        return;
+    }
+
+    // Evaluate the new node
+    await evaluateNode(newNode);
+
+    // Reset inputs
+    moveSelect.value = '';
+    whiteResponseInput.value = '';
+
+    // Update display
+    updateMoveSelector();
+    await renderVariations();
+    
+    showStatus(`Added variation: ${moveSan} (${whiteResponse})`);
+}
+
+// Go back to parent
+async function goBack() {
+    const parent = treeManager.goBack();
+    
+    if (!parent) {
+        showStatus('Already at root', 'info');
+        return;
+    }
+
+    updateBoard(parent.fen);
+    renderBreadcrumb();
+    renderEvalBar(parent.eval || 0);
+    updateMoveSelector();
+    await renderVariations();
+    
+    showStatus('Went back one move');
+}
+
+// Export tree as JSON
+function exportTree() {
+    const treeData = treeManager.exportTree();
+    const json = JSON.stringify(treeData, null, 2);
+    
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `opening-tree-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showStatus('Tree exported successfully');
+}
+
+// Show status message
+function showStatus(message, type = 'success') {
+    statusMessage.textContent = message;
+    statusMessage.className = `status-message status-${type}`;
+    
+    setTimeout(() => {
+        statusMessage.textContent = '';
+        statusMessage.className = 'status-message';
+    }, 3000);
+}
+
+// Event Listeners
+addVariationBtn.addEventListener('click', addVariation);
+backBtn.addEventListener('click', goBack);
+exportBtn.addEventListener('click', exportTree);
+
+moveSelect.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addVariation();
+});
+
+whiteResponseInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addVariation();
+});
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     await evaluateNode(treeManager.root);
     renderBreadcrumb();
+    updateMoveSelector();
     await renderVariations();
+    
+    showStatus('Tree explorer ready!');
 });
 
-// Export for other modules
-window.app = {
-    treeManager,
-    createVariation,
-    navigateToNode,
-    evaluateNode
-};
+// Expose to global for debugging
+window.treeManager = treeManager;
+window.app = { navigateToNode, addVariation, goBack };
