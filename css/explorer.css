@@ -1,0 +1,295 @@
+/* Main Layout */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 20px;
+    background-color: #fafafa;
+}
+
+h1 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+#main-container {
+    display: flex;
+    gap: 20px;
+}
+
+/* Board Section */
+#board-section {
+    display: flex;
+    gap: 15px;
+    align-items: flex-start;
+}
+
+#board {
+    width: 400px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Evaluation Bar */
+#eval-bar-container {
+    width: 30px;
+    height: 400px;
+    background: #e0e0e0;
+    border: 1px solid #999;
+    position: relative;
+    border-radius: 2px;
+}
+
+#eval-bar {
+    width: 100%;
+    position: absolute;
+    bottom: 50%;
+    transition: all 0.2s ease;
+    border-top: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+#eval-bar.white-advantage {
+    background: linear-gradient(to right, #4CAF50, #66BB6A);
+}
+
+#eval-bar.black-advantage {
+    background: linear-gradient(to right, #f44336, #ef5350);
+}
+
+#eval-bar.equal {
+    background: #FFC107;
+}
+
+/* Tree Panel */
+#tree-panel {
+    flex: 1;
+    border: 1px solid #ddd;
+    padding: 15px;
+    background: white;
+    border-radius: 4px;
+    max-height: 600px;
+    overflow-y: auto;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+#tree-panel h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 1.1em;
+    border-bottom: 2px solid #0066cc;
+    padding-bottom: 10px;
+}
+
+/* Breadcrumb Navigation */
+#breadcrumb {
+    margin: 15px 0;
+    padding: 12px;
+    background: #f5f5f5;
+    border-left: 4px solid #0066cc;
+    border-radius: 2px;
+    font-size: 0.95em;
+    font-family: 'Courier New', monospace;
+    color: #333;
+    overflow-x: auto;
+}
+
+#breadcrumb span {
+    margin: 0 4px;
+}
+
+/* Variation Groups */
+.variation-group {
+    margin: 12px 0;
+    padding: 12px;
+    background: #f9f9f9;
+    border-left: 4px solid #0066cc;
+    border-radius: 2px;
+}
+
+.variation-group h4 {
+    margin: 0 0 10px 0;
+    font-size: 0.95em;
+    color: #0066cc;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Node Buttons */
+.node-button {
+    display: block;
+    width: 100%;
+    margin: 6px 0;
+    padding: 8px 12px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    cursor: pointer;
+    text-align: left;
+    font-size: 0.9em;
+    transition: all 0.15s ease;
+    color: #333;
+}
+
+.node-button:hover {
+    background: #e8f0ff;
+    border-color: #0066cc;
+    transform: translateX(2px);
+}
+
+.node-button.active {
+    background: #0066cc;
+    color: white;
+    border-color: #0052a3;
+    font-weight: 600;
+}
+
+.node-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Node Info Text */
+.node-info {
+    font-size: 0.8em;
+    color: #666;
+    margin-top: 3px;
+}
+
+/* Controls Section */
+#controls-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#controls-section h3 {
+    margin-top: 0;
+    font-size: 1em;
+}
+
+/* Input Fields */
+.input-group {
+    margin: 10px 0;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.input-group label {
+    display: flex;
+    align-items: center;
+    font-size: 0.9em;
+    color: #555;
+    font-weight: 500;
+}
+
+.input-group input[type="text"],
+.input-group select {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.input-group input[type="text"]:focus,
+.input-group select:focus {
+    outline: none;
+    border-color: #0066cc;
+    box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.btn-primary {
+    background: #0066cc;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0052a3;
+    box-shadow: 0 2px 6px rgba(0, 102, 204, 0.3);
+}
+
+.btn-primary:active {
+    transform: scale(0.98);
+}
+
+.btn-secondary {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #d0d0d0;
+}
+
+.btn-danger {
+    background: #f44336;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #d32f2f;
+}
+
+/* Scrollbar Styling (optional but nice) */
+#tree-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+#tree-panel::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#tree-panel::-webkit-scrollbar-thumb {
+    background: #0066cc;
+    border-radius: 3px;
+}
+
+#tree-panel::-webkit-scrollbar-thumb:hover {
+    background: #0052a3;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+    #main-container {
+        flex-direction: column;
+    }
+
+    #tree-panel {
+        max-height: 400px;
+    }
+}
+
+@media (max-width: 600px) {
+    body {
+        margin: 10px;
+    }
+
+    #board {
+        width: 100%;
+    }
+
+    #board-section {
+        flex-direction: column;
+    }
+
+    .input-group {
+        flex-direction: column;
+    }
+
+    .input-group input,
+    .input-group select {
+        width: 100%;
+    }
+}
