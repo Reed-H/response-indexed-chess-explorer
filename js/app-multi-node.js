@@ -17,11 +17,18 @@ const addVariationBtn = document.getElementById('add-variation-btn');
 const backBtn = document.getElementById('back-btn');
 const exportBtn = document.getElementById('export-btn');
 const statusMessage = document.getElementById('status-message');
+const moveSelectLabel = document.querySelector('label[for="move-select"]'); // Get the label element
 
 // Normalize evaluation for side to move
 function normalizeEval(score, fen) {
     const sideToMove = fen.split(' ')[1];
     return sideToMove === 'w' ? score : -score;
+}
+
+// Determine whose turn it is
+function getSideToMoveName(fen) {
+    const sideToMove = fen.split(' ')[1];
+    return sideToMove === 'w' ? "White's Move" : "Black's Move";
 }
 
 // Update eval bar
@@ -67,8 +74,10 @@ function evaluateNode(node) {
             return;
         }
 
+        console.log('Evaluating position:', node.fen);
         engine.evaluate(node.fen, 15, (score) => {
             const normalized = normalizeEval(score, node.fen);
+            console.log('Evaluation result:', normalized);
             node.setEval(normalized);
             resolve(normalized);
         });
@@ -79,6 +88,12 @@ function evaluateNode(node) {
 function updateMoveSelector() {
     moveSelect.innerHTML = '<option value="">-- Select Move --</option>';
     const legalMoves = treeManager.getLegalMoves();
+    const sideToMoveName = getSideToMoveName(treeManager.currentNode.fen);
+    
+    // Update the label to show whose turn it is
+    if (moveSelectLabel) {
+        moveSelectLabel.textContent = sideToMoveName + ':';
+    }
     
     legalMoves.forEach(move => {
         const option = document.createElement('option');
@@ -86,9 +101,11 @@ function updateMoveSelector() {
         option.textContent = move.san;
         moveSelect.appendChild(option);
     });
+    
+    console.log(`${sideToMoveName} - ${legalMoves.length} legal moves available`);
 }
 
-// Render variations grouped by white response
+// Render variations grouped by white response (WITHOUT recursive call)
 async function renderVariations() {
     variationsContainer.innerHTML = '';
     const children = treeManager.currentNode.children;
@@ -128,17 +145,40 @@ async function renderVariations() {
         variationsContainer.appendChild(group);
     }
 
-    // Auto-evaluate all children
-    for (const child of children) {
-        await evaluateNode(child);
-    }
+    // Auto-evaluate all children WITHOUT re-rendering after
+    const unevaluatedChildren = children.filter(child => child.eval === null);
     
-    // Re-render to show evaluations
-    await renderVariations();
+    if (unevaluatedChildren.length > 0) {
+        console.log(`Evaluating ${unevaluatedChildren.length} child nodes...`);
+        for (const child of unevaluatedChildren) {
+            await evaluateNode(child);
+        }
+        // Only refresh the display, don't recursively render variations
+        refreshVariationEvals();
+    }
+}
+
+// Refresh just the evaluation displays without re-rendering everything
+function refreshVariationEvals() {
+    const children = treeManager.currentNode.children;
+    const buttons = variationsContainer.querySelectorAll('.node-button');
+    
+    buttons.forEach((btn, idx) => {
+        if (idx < children.length) {
+            const child = children[idx];
+            let displayText = child.move.san;
+            if (child.eval !== null) {
+                displayText += ` (${child.eval.toFixed(2)})`;
+            }
+            btn.textContent = displayText;
+        }
+    });
 }
 
 // Navigate to a node
 async function navigateToNode(node) {
+    console.log('Navigating to:', node.move.san, node.fen);
+    
     treeManager.navigateToNode(node);
     updateBoard(node.fen);
     renderBreadcrumb();
@@ -154,8 +194,12 @@ async function navigateToNode(node) {
 
 // Add a new variation
 async function addVariation() {
+    console.log('Adding variation...');
+    
     const moveSan = moveSelect.value;
     const whiteResponse = whiteResponseInput.value.trim();
+
+    console.log('Move:', moveSan, 'Response:', whiteResponse);
 
     if (!moveSan) {
         showStatus('Please select a move', 'error');
@@ -167,16 +211,20 @@ async function addVariation() {
         return;
     }
 
+    console.log('Creating child node...');
     const newNode = treeManager.createChildNode(moveSan, whiteResponse);
     
     if (!newNode) {
         showStatus('Invalid move', 'error');
+        console.error('Failed to create node for move:', moveSan);
         return;
     }
 
+    console.log('Evaluating new node...');
     // Evaluate the new node
     await evaluateNode(newNode);
 
+    console.log('Updating UI...');
     // Reset inputs
     moveSelect.value = '';
     whiteResponseInput.value = '';
@@ -186,6 +234,7 @@ async function addVariation() {
     await renderVariations();
     
     showStatus(`Added variation: ${moveSan} (${whiteResponse})`);
+    console.log('Variation added successfully');
 }
 
 // Go back to parent
@@ -250,12 +299,14 @@ whiteResponseInput.addEventListener('keypress', (e) => {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('Initializing tree explorer...');
     await evaluateNode(treeManager.root);
     renderBreadcrumb();
     updateMoveSelector();
     await renderVariations();
     
     showStatus('Tree explorer ready!');
+    console.log('Initialization complete');
 });
 
 // Expose to global for debugging
