@@ -6,55 +6,58 @@ import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/esm/ches
 const engine = new Engine();
 const treeManager = new TreeManager(START_FEN);
 
-// DOM Elements
-const board = Chessboard("board", { position: START_FEN, draggable: false });
+const boardElement = document.getElementById('board');
 const evalBar = document.getElementById('eval-bar');
 const variationsContainer = document.getElementById('variations-container');
+const treeJsonContainer = document.getElementById('tree-json-container');
 const breadcrumb = document.getElementById('breadcrumb');
-const moveSelect = document.getElementById('move-select');
+const groupingToggle = document.getElementById('grouping-toggle');
+const selectedMoveDisplay = document.getElementById('selected-move-display');
 const whiteResponseInput = document.getElementById('white-response-input');
 const addVariationBtn = document.getElementById('add-variation-btn');
+const undoMoveBtn = document.getElementById('undo-move-btn');
 const backBtn = document.getElementById('back-btn');
 const exportBtn = document.getElementById('export-btn');
 const statusMessage = document.getElementById('status-message');
-const moveSelectLabel = document.querySelector('label[for="move-select"]'); // Get the label element
 
-// Normalize evaluation for side to move
+let selectedMove = null;
+let selectedSourceSquare = null;
+
+const board = Chessboard('board', {
+    position: START_FEN,
+    draggable: true,
+    onDragStart,
+    onDrop,
+    onSnapEnd
+});
+
+function getCurrentPositionGame() {
+    return new Chess(treeManager.currentNode.fen);
+}
+
+function getLegalMoves() {
+    return treeManager.getLegalMoves();
+}
+
+function getDisplayFen() {
+    return selectedMove ? selectedMove.fen : treeManager.currentNode.fen;
+}
+
 function normalizeEval(score, fen) {
     const sideToMove = fen.split(' ')[1];
     return sideToMove === 'w' ? score : -score;
 }
 
-// Determine whose turn it is
-function getSideToMoveName(fen) {
-    const sideToMove = fen.split(' ')[1];
-    return sideToMove === 'w' ? "White's Move" : "Black's Move";
-}
-
-// Update eval bar
 function renderEvalBar(score) {
     const clamped = Math.max(-5, Math.min(5, score));
     const percent = 50 + clamped * 10;
-    evalBar.style.height = percent + '%';
-    
-    if (score > 0.5) {
-        evalBar.classList.add('white-advantage');
-        evalBar.classList.remove('black-advantage', 'equal');
-    } else if (score < -0.5) {
-        evalBar.classList.add('black-advantage');
-        evalBar.classList.remove('white-advantage', 'equal');
-    } else {
-        evalBar.classList.add('equal');
-        evalBar.classList.remove('white-advantage', 'black-advantage');
-    }
+    evalBar.style.height = `${percent}%`;
 }
 
-// Update board display
-function updateBoard(fen) {
-    board.position(fen);
+function updateBoard() {
+    board.position(getDisplayFen());
 }
 
-// Render breadcrumb navigation
 function renderBreadcrumb() {
     const path = treeManager.getCurrentPath();
     const breadcrumbHtml = path.map((node, idx) => {
@@ -66,7 +69,6 @@ function renderBreadcrumb() {
     breadcrumb.innerHTML = breadcrumbHtml;
 }
 
-// Evaluate node if not already evaluated
 function evaluateNode(node) {
     return new Promise(resolve => {
         if (node.eval !== null) {
@@ -74,135 +76,282 @@ function evaluateNode(node) {
             return;
         }
 
-        console.log('Evaluating position:', node.fen);
         engine.evaluate(node.fen, 15, (score) => {
             const normalized = normalizeEval(score, node.fen);
-            console.log('Evaluation result:', normalized);
             node.setEval(normalized);
             resolve(normalized);
         });
     });
 }
 
-// Populate move selector with legal moves
-function updateMoveSelector() {
-    moveSelect.innerHTML = '<option value="">-- Select Move --</option>';
-    const legalMoves = treeManager.getLegalMoves();
-    const sideToMoveName = getSideToMoveName(treeManager.currentNode.fen);
-    
-    // Update the label to show whose turn it is
-    if (moveSelectLabel) {
-        moveSelectLabel.textContent = sideToMoveName + ':';
-    }
-    
-    legalMoves.forEach(move => {
-        const option = document.createElement('option');
-        option.value = move.san;
-        option.textContent = move.san;
-        moveSelect.appendChild(option);
-    });
-    
-    console.log(`${sideToMoveName} - ${legalMoves.length} legal moves available`);
+function clearMoveSelection() {
+    selectedMove = null;
+    selectedSourceSquare = null;
+    clearHighlights();
+    selectedMoveDisplay.textContent = 'None';
+    undoMoveBtn.disabled = true;
+    updateBoard();
 }
 
-// Render variations grouped by white response (WITHOUT recursive call)
+function setSelectedMove(move) {
+    selectedMove = move;
+    selectedSourceSquare = null;
+    clearHighlights();
+    selectedMoveDisplay.textContent = move.san;
+    undoMoveBtn.disabled = false;
+    updateBoard();
+}
+
+function clearHighlights() {
+    boardElement.querySelectorAll('.square-55d63').forEach(squareEl => {
+        squareEl.classList.remove('move-source', 'move-target');
+    });
+}
+
+function highlightMovesFrom(sourceSquare) {
+    clearHighlights();
+    const legalMovesFromSource = getLegalMoves().filter(move => move.from === sourceSquare);
+
+    if (legalMovesFromSource.length === 0) {
+        return;
+    }
+
+    const sourceEl = boardElement.querySelector(`[data-square="${sourceSquare}"]`);
+    if (sourceEl) {
+        sourceEl.classList.add('move-source');
+    }
+
+    legalMovesFromSource.forEach(move => {
+        const targetEl = boardElement.querySelector(`[data-square="${move.to}"]`);
+        if (targetEl) {
+            targetEl.classList.add('move-target');
+        }
+    });
+}
+
+function findLegalMove(source, target) {
+    return getLegalMoves().find(move => move.from === source && move.to === target) || null;
+}
+
+function previewMove(source, target) {
+    const move = findLegalMove(source, target);
+    if (!move) {
+        return false;
+    }
+
+    const game = getCurrentPositionGame();
+    const playedMove = game.move({ from: source, to: target, promotion: 'q' });
+    if (!playedMove) {
+        return false;
+    }
+
+    setSelectedMove({ ...move, san: playedMove.san, fen: game.fen() });
+    return true;
+}
+
+function onDragStart(source) {
+    const game = getCurrentPositionGame();
+    const pieceData = game.get(source);
+
+    if (!pieceData || pieceData.color !== game.turn()) {
+        return false;
+    }
+
+    const hasLegalMove = getLegalMoves().some(move => move.from === source);
+    if (!hasLegalMove) {
+        return false;
+    }
+
+    highlightMovesFrom(source);
+    return true;
+}
+
+function onDrop(source, target) {
+    if (!previewMove(source, target)) {
+        clearHighlights();
+        return 'snapback';
+    }
+
+    return 'drop';
+}
+
+function onSnapEnd() {
+    updateBoard();
+}
+
+function handleBoardClick(event) {
+    const squareElement = event.target.closest('.square-55d63');
+    if (!squareElement || !boardElement.contains(squareElement)) {
+        return;
+    }
+
+    const clickedSquare = squareElement.getAttribute('data-square');
+    if (!clickedSquare) {
+        return;
+    }
+
+    const game = getCurrentPositionGame();
+
+    if (selectedSourceSquare && previewMove(selectedSourceSquare, clickedSquare)) {
+        return;
+    }
+
+    const piece = game.get(clickedSquare);
+    if (piece && piece.color === game.turn()) {
+        selectedSourceSquare = clickedSquare;
+        highlightMovesFrom(clickedSquare);
+        return;
+    }
+
+    selectedSourceSquare = null;
+    clearHighlights();
+}
+
+function renderMoveCluster(title, nodes) {
+    const group = document.createElement('div');
+    group.className = 'variation-group';
+
+    const label = document.createElement('h4');
+    label.textContent = title;
+    group.appendChild(label);
+
+    const list = document.createElement('div');
+    list.className = 'variation-cluster';
+
+    for (const node of nodes) {
+        const nodeBtn = document.createElement('button');
+        nodeBtn.className = 'node-button';
+
+        let displayText = node.move.san;
+        if (node.eval !== null) {
+            displayText += ` (${node.eval.toFixed(2)})`;
+        } else {
+            displayText += ' (?)';
+        }
+
+        nodeBtn.textContent = displayText;
+        nodeBtn.onclick = () => navigateToNode(node);
+        list.appendChild(nodeBtn);
+    }
+
+    group.appendChild(list);
+    return group;
+}
+
 async function renderVariations() {
     variationsContainer.innerHTML = '';
     const children = treeManager.currentNode.children;
-    
+
     if (children.length === 0) {
         variationsContainer.innerHTML = '<p><em>No variations added yet. Use the controls below.</em></p>';
         return;
     }
 
-    const grouped = treeManager.getChildrenGroupedByResponse();
+    const shouldGroup = Boolean(groupingToggle?.checked);
+    const groupsToRender = shouldGroup
+        ? Object.entries(treeManager.getChildrenGroupedByResponse())
+        : [['All Responses', children]];
 
-    for (const [whiteResponse, nodes] of Object.entries(grouped)) {
-        const group = document.createElement('div');
-        group.className = 'variation-group';
-        
-        const title = document.createElement('h4');
-        title.textContent = whiteResponse;
-        group.appendChild(title);
-
-        for (const node of nodes) {
-            const nodeBtn = document.createElement('button');
-            nodeBtn.className = 'node-button';
-            
-            let displayText = node.move.san;
-            if (node.eval !== null) {
-                displayText += ` (${node.eval.toFixed(2)})`;
-            } else {
-                displayText += ' (?)';
-            }
-            
-            nodeBtn.textContent = displayText;
-            nodeBtn.onclick = () => navigateToNode(node);
-            
-            group.appendChild(nodeBtn);
-        }
-
-        variationsContainer.appendChild(group);
+    for (const [response, nodes] of groupsToRender) {
+        variationsContainer.appendChild(renderMoveCluster(response, nodes));
     }
 
-    // Auto-evaluate all children WITHOUT re-rendering after
     const unevaluatedChildren = children.filter(child => child.eval === null);
-    
+    for (const child of unevaluatedChildren) {
+        await evaluateNode(child);
+    }
+
     if (unevaluatedChildren.length > 0) {
-        console.log(`Evaluating ${unevaluatedChildren.length} child nodes...`);
-        for (const child of unevaluatedChildren) {
-            await evaluateNode(child);
-        }
-        // Only refresh the display, don't recursively render variations
-        refreshVariationEvals();
+        await renderVariations();
     }
 }
 
-// Refresh just the evaluation displays without re-rendering everything
-function refreshVariationEvals() {
-    const children = treeManager.currentNode.children;
-    const buttons = variationsContainer.querySelectorAll('.node-button');
-    
-    buttons.forEach((btn, idx) => {
-        if (idx < children.length) {
-            const child = children[idx];
-            let displayText = child.move.san;
-            if (child.eval !== null) {
-                displayText += ` (${child.eval.toFixed(2)})`;
-            }
-            btn.textContent = displayText;
+function renderTreeNodeFromJson(jsonNode, depth = 0) {
+    const row = document.createElement('div');
+    row.className = 'tree-node-row';
+    row.style.paddingLeft = `${depth * 14}px`;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tree-node-button';
+
+    const moveLabel = jsonNode.move?.san || 'Start';
+    const evalLabel = typeof jsonNode.eval === 'number' ? ` (${jsonNode.eval.toFixed(2)})` : '';
+    const groupLabel = jsonNode.whiteResponse ? ` · ${jsonNode.whiteResponse}` : '';
+    button.textContent = `${moveLabel}${evalLabel}${groupLabel}`;
+
+    if (jsonNode.fen === treeManager.currentNode.fen) {
+        button.classList.add('active');
+    }
+
+    button.addEventListener('click', () => {
+        const node = treeManager.getNodeByFen(jsonNode.fen);
+        if (node) {
+            navigateToNode(node);
         }
     });
+
+    row.appendChild(button);
+
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(row);
+
+    if (jsonNode.children.length > 0) {
+        const shouldGroup = groupingToggle.checked;
+        const orderedChildren = shouldGroup
+            ? groupChildrenJson(jsonNode.children)
+            : jsonNode.children;
+
+        for (const child of orderedChildren) {
+            fragment.appendChild(renderTreeNodeFromJson(child, depth + 1));
+        }
+    }
+
+    return fragment;
 }
 
-// Navigate to a node
+function groupChildrenJson(children) {
+    const buckets = new Map();
+    for (const child of children) {
+        const key = child.whiteResponse || 'Ungrouped';
+        if (!buckets.has(key)) {
+            buckets.set(key, []);
+        }
+        buckets.get(key).push(child);
+    }
+
+    const ordered = [];
+    for (const bucket of buckets.values()) {
+        ordered.push(...bucket);
+    }
+    return ordered;
+}
+
+function renderTreeJsonView() {
+    treeJsonContainer.innerHTML = '';
+    const treeJson = treeManager.exportTree();
+    treeJsonContainer.appendChild(renderTreeNodeFromJson(treeJson.root));
+}
+
 async function navigateToNode(node) {
-    console.log('Navigating to:', node.move.san, node.fen);
-    
     treeManager.navigateToNode(node);
-    updateBoard(node.fen);
+    clearMoveSelection();
     renderBreadcrumb();
-    
+
     await evaluateNode(node);
-    renderEvalBar(node.eval);
-    
-    updateMoveSelector();
+    renderEvalBar(node.eval || 0);
+
     await renderVariations();
-    
-    showStatus(`Navigated to ${node.move.san}`);
+    renderTreeJsonView();
+
+    showStatus(node.move ? `Navigated to ${node.move.san}` : 'Navigated to start');
 }
 
-// Add a new variation
 async function addVariation() {
-    console.log('Adding variation...');
-    
-    const moveSan = moveSelect.value;
     const whiteResponse = whiteResponseInput.value.trim();
 
-    console.log('Move:', moveSan, 'Response:', whiteResponse);
-
-    if (!moveSan) {
-        showStatus('Please select a move', 'error');
+    if (!selectedMove) {
+        showStatus('Select a move on the board first', 'error');
         return;
     }
 
@@ -211,55 +360,45 @@ async function addVariation() {
         return;
     }
 
-    console.log('Creating child node...');
-    const newNode = treeManager.createChildNode(moveSan, whiteResponse);
-    
+    const newNode = treeManager.createChildNode(selectedMove.san, whiteResponse);
+
     if (!newNode) {
         showStatus('Invalid move', 'error');
-        console.error('Failed to create node for move:', moveSan);
         return;
     }
 
-    console.log('Evaluating new node...');
-    // Evaluate the new node
     await evaluateNode(newNode);
 
-    console.log('Updating UI...');
-    // Reset inputs
-    moveSelect.value = '';
     whiteResponseInput.value = '';
-
-    // Update display
-    updateMoveSelector();
+    const addedMoveSan = selectedMove.san;
+    clearMoveSelection();
     await renderVariations();
-    
-    showStatus(`Added variation: ${moveSan} (${whiteResponse})`);
-    console.log('Variation added successfully');
+    renderTreeJsonView();
+
+    showStatus(`Added variation: ${addedMoveSan} (${whiteResponse})`);
 }
 
-// Go back to parent
 async function goBack() {
     const parent = treeManager.goBack();
-    
+
     if (!parent) {
         showStatus('Already at root', 'info');
         return;
     }
 
-    updateBoard(parent.fen);
+    clearMoveSelection();
     renderBreadcrumb();
     renderEvalBar(parent.eval || 0);
-    updateMoveSelector();
     await renderVariations();
-    
+    renderTreeJsonView();
+
     showStatus('Went back one move');
 }
 
-// Export tree as JSON
 function exportTree() {
     const treeData = treeManager.exportTree();
     const json = JSON.stringify(treeData, null, 2);
-    
+
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -269,46 +408,52 @@ function exportTree() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
+
     showStatus('Tree exported successfully');
 }
 
-// Show status message
 function showStatus(message, type = 'success') {
     statusMessage.textContent = message;
     statusMessage.className = `status-message status-${type}`;
-    
+
     setTimeout(() => {
         statusMessage.textContent = '';
         statusMessage.className = 'status-message';
     }, 3000);
 }
 
-// Event Listeners
 addVariationBtn.addEventListener('click', addVariation);
+undoMoveBtn.addEventListener('click', () => {
+    clearMoveSelection();
+    showStatus('Move selection undone', 'info');
+});
 backBtn.addEventListener('click', goBack);
 exportBtn.addEventListener('click', exportTree);
+if (groupingToggle) {
+    groupingToggle.addEventListener('change', () => {
+        renderVariations();
+        renderTreeJsonView();
+    });
+}
 
-moveSelect.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') addVariation();
-});
+if (boardElement) {
+    boardElement.addEventListener('click', handleBoardClick);
+}
 
 whiteResponseInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') addVariation();
 });
 
-// Initialize
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Initializing tree explorer...');
     await evaluateNode(treeManager.root);
     renderBreadcrumb();
-    updateMoveSelector();
+    renderEvalBar(treeManager.root.eval || 0);
+    clearMoveSelection();
     await renderVariations();
-    
-    showStatus('Tree explorer ready!');
-    console.log('Initialization complete');
+    renderTreeJsonView();
+
+    showStatus('Tree explorer ready! Select a move by dragging or clicking a piece.');
 });
 
-// Expose to global for debugging
 window.treeManager = treeManager;
 window.app = { navigateToNode, addVariation, goBack };
