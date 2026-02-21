@@ -59,6 +59,14 @@ export class TreeManager {
         return newNode;
     }
 
+
+    /**
+     * Fetch a node by FEN from the index
+     */
+    getNodeByFen(fen) {
+        return this.nodeIndex.get(fen) || null;
+    }
+
     /**
      * Navigate to an existing node and update current position
      */

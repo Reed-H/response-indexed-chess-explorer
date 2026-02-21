@@ -31,30 +31,20 @@ h1 {
 #eval-bar-container {
     width: 30px;
     height: 400px;
-    background: #e0e0e0;
-    border: 1px solid #999;
+    background: #2f2f2f;
+    border: 1px solid #1f1f1f;
     position: relative;
     border-radius: 2px;
+    overflow: hidden;
 }
 
 #eval-bar {
     width: 100%;
     position: absolute;
-    bottom: 50%;
-    transition: all 0.2s ease;
-    border-top: 2px solid rgba(0, 0, 0, 0.2);
-}
-
-#eval-bar.white-advantage {
-    background: linear-gradient(to right, #4CAF50, #66BB6A);
-}
-
-#eval-bar.black-advantage {
-    background: linear-gradient(to right, #f44336, #ef5350);
-}
-
-#eval-bar.equal {
-    background: #FFC107;
+    bottom: 0;
+    height: 50%;
+    transition: height 0.2s ease;
+    background: #f3e7c9;
 }
 
 /* Tree Panel */
@@ -92,6 +82,56 @@ h1 {
 
 #breadcrumb span {
     margin: 0 4px;
+}
+
+
+.tree-view-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+#tree-json-container {
+    margin-top: 10px;
+    border-top: 1px solid #ddd;
+    padding-top: 10px;
+}
+
+.tree-node-row {
+    margin: 4px 0;
+}
+
+.tree-node-button {
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-size: 0.82em;
+    cursor: pointer;
+    text-align: left;
+}
+
+.tree-node-button:hover {
+    border-color: #0066cc;
+    background: #eef5ff;
+}
+
+.tree-node-button.active {
+    background: #0066cc;
+    color: #fff;
+    border-color: #0052a3;
+}
+
+.variation-cluster {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.variation-cluster .node-button {
+    width: auto;
+    min-width: 120px;
 }
 
 /* Variation Groups */

@@ -10,6 +10,7 @@ const treeManager = new TreeManager(START_FEN);
 const boardElement = document.getElementById('board');
 const evalBar = document.getElementById('eval-bar');
 const variationsContainer = document.getElementById('variations-container');
+const treeJsonContainer = document.getElementById('tree-json-container');
 const breadcrumb = document.getElementById('breadcrumb');
 const selectedMoveDisplay = document.getElementById('selected-move-display');
 const whiteResponseInput = document.getElementById('white-response-input');
@@ -254,8 +255,8 @@ async function renderVariations() {
 
             group.appendChild(nodeBtn);
         }
-
-        variationsContainer.appendChild(group);
+    } else {
+        variationsContainer.appendChild(renderMoveCluster('All Responses', children));
     }
 
     const unevaluatedChildren = children.filter(child => child.eval === null);
@@ -282,6 +283,47 @@ function refreshVariationEvals() {
             btn.textContent = displayText;
         }
     });
+
+    row.appendChild(button);
+
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(row);
+
+    if (jsonNode.children.length > 0) {
+        const shouldGroup = groupingToggle.checked;
+        const orderedChildren = shouldGroup
+            ? groupChildrenJson(jsonNode.children)
+            : jsonNode.children;
+
+        for (const child of orderedChildren) {
+            fragment.appendChild(renderTreeNodeFromJson(child, depth + 1));
+        }
+    }
+
+    return fragment;
+}
+
+function groupChildrenJson(children) {
+    const buckets = new Map();
+    for (const child of children) {
+        const key = child.whiteResponse || 'Ungrouped';
+        if (!buckets.has(key)) {
+            buckets.set(key, []);
+        }
+        buckets.get(key).push(child);
+    }
+
+    const ordered = [];
+    for (const bucket of buckets.values()) {
+        ordered.push(...bucket);
+    }
+    return ordered;
+}
+
+function renderTreeJsonView() {
+    treeJsonContainer.innerHTML = '';
+    const treeJson = treeManager.exportTree();
+    treeJsonContainer.appendChild(renderTreeNodeFromJson(treeJson.root));
 }
 
 async function navigateToNode(node) {
@@ -377,6 +419,8 @@ undoMoveBtn.addEventListener('click', () => {
 });
 backBtn.addEventListener('click', goBack);
 exportBtn.addEventListener('click', exportTree);
+
+boardElement.addEventListener('click', handleBoardClick);
 
 boardElement.addEventListener('click', handleBoardClick);
 
