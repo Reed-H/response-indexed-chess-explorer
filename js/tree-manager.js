@@ -9,9 +9,6 @@ export class TreeManager {
         this.nodeIndex.set(startFen, this.root);
     }
 
-    /**
-     * Get all legal moves from current position
-     */
     getLegalMoves() {
         const game = new Chess(this.currentNode.fen);
         return game.moves({ verbose: true }).map(m => ({
@@ -21,147 +18,130 @@ export class TreeManager {
         }));
     }
 
-    /**
-     * Create a new child node from current position after a move
-     * @param {string} moveSan - Standard algebraic notation move
-     * @param {string} whiteResponse - Label for grouping (e.g., "Solid Defense")
-     * @returns {PositionNode|null} The created node or null if move is invalid
-     */
-    createChildNode(moveSan, whiteResponse = null) {
+    createChildNode(moveSan, whiteResponse = null, lineTag = null) {
         const game = new Chess(this.currentNode.fen);
         const move = game.move(moveSan);
-        
         if (!move) return null;
 
         const newFen = game.fen();
-        
-        // Check if node already exists (transposition - same position from different path)
         if (this.nodeIndex.has(newFen)) {
             const existingNode = this.nodeIndex.get(newFen);
-            // Add to current node's children if not already there
             if (!this.currentNode.children.includes(existingNode)) {
                 this.currentNode.addChild(existingNode);
             }
+            if (whiteResponse && !existingNode.whiteResponse) existingNode.setWhiteResponse(whiteResponse);
+            if (lineTag && !existingNode.lineTag) existingNode.setLineTag(lineTag);
             return existingNode;
         }
 
-        // Create new node
+        const inheritedTag = lineTag || this.currentNode.lineTag || null;
         const newNode = new PositionNode({
             fen: newFen,
             move: { san: moveSan, ...move },
             parent: this.currentNode,
-            whiteResponse: whiteResponse
+            whiteResponse,
+            lineTag: inheritedTag
         });
 
         this.currentNode.addChild(newNode);
         this.nodeIndex.set(newFen, newNode);
-
         return newNode;
     }
 
-    /**
-     * Navigate to an existing node and update current position
-     */
+    getNodeByFen(fen) {
+        return this.nodeIndex.get(fen) || null;
+    }
+
     navigateToNode(node) {
-        if (!this.nodeIndex.has(node.fen)) {
-            console.warn('Node not in tree');
-            return null;
-        }
+        if (!this.nodeIndex.has(node.fen)) return null;
         this.currentNode = node;
         return node.fen;
     }
 
-    /**
-     * Navigate by move (SAN) from current position
-     */
-    navigateByMove(moveSan) {
-        const childNode = this.currentNode.children.find(
-            child => child.move && child.move.san === moveSan
-        );
-        
-        if (childNode) {
-            this.currentNode = childNode;
-            return childNode;
-        }
-        return null;
-    }
-
-    /**
-     * Go back to parent node
-     */
     goBack() {
-        if (this.currentNode.parent) {
-            this.currentNode = this.currentNode.parent;
-            return this.currentNode;
-        }
-        return null;
+        if (!this.currentNode.parent) return null;
+        this.currentNode = this.currentNode.parent;
+        return this.currentNode;
     }
 
-    /**
-     * Get child nodes grouped by white response
-     * Key for response-indexed visualization
-     */
     getChildrenGroupedByResponse() {
         const groups = {};
-        
         this.currentNode.children.forEach(child => {
             const responseKey = child.whiteResponse || 'Ungrouped';
-            if (!groups[responseKey]) {
-                groups[responseKey] = [];
-            }
+            if (!groups[responseKey]) groups[responseKey] = [];
             groups[responseKey].push(child);
         });
-
         return groups;
     }
 
-    /**
-     * Get the path from root to current node
-     */
     getCurrentPath() {
         const path = [];
         let node = this.currentNode;
-        
         while (node.parent) {
             path.unshift(node);
             node = node.parent;
         }
         path.unshift(this.root);
-        
         return path;
     }
 
-    /**
-     * Get depth of current node from root
-     */
-    getCurrentDepth() {
-        let depth = 0;
-        let node = this.currentNode;
-        while (node.parent) {
-            depth++;
-            node = node.parent;
-        }
-        return depth;
-    }
-
-    /**
-     * Get all nodes in tree (for analysis, export, etc.)
-     */
     getAllNodes(node = this.root) {
         const nodes = [node];
-        for (const child of node.children) {
-            nodes.push(...this.getAllNodes(child));
-        }
+        for (const child of node.children) nodes.push(...this.getAllNodes(child));
         return nodes;
     }
 
-    /**
-     * Export tree structure as JSON
-     */
     exportTree() {
-        return {
-            root: this._serializeNode(this.root)
-        };
+        return { root: this._serializeNode(this.root) };
+    }
+
+    importTree(treeData) {
+        if (!treeData || !treeData.root || !treeData.root.fen) throw new Error('Invalid tree JSON');
+        this.nodeIndex.clear();
+        this.root = this._deserializeNode(treeData.root, null);
+        this.currentNode = this.root;
+    }
+
+    importLines(linesText) {
+        const lines = linesText.split('\n').map(line => line.trim()).filter(Boolean);
+        let imported = 0;
+
+        for (const line of lines) {
+            const [fenPart, movesPart = ''] = line.split('|').map(v => v.trim());
+            const startFen = fenPart || this.root.fen;
+            const moves = movesPart.split(/\s+/).filter(Boolean);
+            const game = new Chess(startFen);
+
+            let parentNode = this.nodeIndex.get(startFen);
+            if (!parentNode) {
+                parentNode = new PositionNode({ fen: startFen });
+                this.root.addChild(parentNode);
+                parentNode.parent = this.root;
+                this.nodeIndex.set(startFen, parentNode);
+            }
+
+            for (const moveSan of moves) {
+                const played = game.move(moveSan);
+                if (!played) break;
+                const fen = game.fen();
+                let child = this.nodeIndex.get(fen);
+                if (!child) {
+                    child = new PositionNode({
+                        fen,
+                        move: { san: moveSan, ...played },
+                        parent: parentNode,
+                        whiteResponse: null,
+                        lineTag: parentNode.lineTag
+                    });
+                    this.nodeIndex.set(fen, child);
+                }
+                if (!parentNode.children.includes(child)) parentNode.addChild(child);
+                parentNode = child;
+            }
+            imported++;
+        }
+
+        return imported;
     }
 
     _serializeNode(node) {
@@ -170,7 +150,27 @@ export class TreeManager {
             move: node.move ? { san: node.move.san } : null,
             eval: node.eval,
             whiteResponse: node.whiteResponse,
+            lineTag: node.lineTag,
             children: node.children.map(child => this._serializeNode(child))
         };
+    }
+
+    _deserializeNode(data, parent) {
+        const node = new PositionNode({
+            fen: data.fen,
+            move: data.move,
+            parent,
+            whiteResponse: data.whiteResponse || null,
+            lineTag: data.lineTag || (parent ? parent.lineTag : null)
+        });
+        node.eval = typeof data.eval === 'number' ? data.eval : null;
+        this.nodeIndex.set(node.fen, node);
+
+        for (const childData of (data.children || [])) {
+            const childNode = this._deserializeNode(childData, node);
+            node.addChild(childNode);
+        }
+
+        return node;
     }
 }

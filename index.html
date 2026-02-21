@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <title>Response Indexed Opening Explorer</title>
-    
+
     <link rel="stylesheet" href="./js/chessboard.css" />
     <link rel="stylesheet" href="./css/explorer.css" />
 </head>
 <body>
     <h1>Response Indexed Opening Explorer</h1>
-    
+
     <div id="breadcrumb"></div>
-    
+
     <div id="main-container">
         <div id="board-section">
             <div id="board"></div>
@@ -19,46 +19,104 @@
                 <div id="eval-bar"></div>
             </div>
         </div>
-        
+
         <div id="tree-panel">
             <h3>Move Variations</h3>
+            <div class="tree-view-controls">
+                <label for="grouping-toggle">Grouped view</label>
+                <input type="checkbox" id="grouping-toggle" checked />
+                <label for="cluster-topn">Cluster top-N overlap</label>
+                <select id="cluster-topn">
+                    <option value="1">1</option>
+                    <option value="2" selected>2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <div class="tree-view-controls">
+                <label for="black-filter">Black label filter</label>
+                <select id="black-filter"><option value="">All</option></select>
+                <label for="white-filter">White strategy filter</label>
+                <select id="white-filter"><option value="">All</option></select>
+            </div>
             <div id="variations-container"></div>
+            <h3>Tree (JSON View)</h3>
+            <div id="tree-json-container"></div>
         </div>
     </div>
 
-    <!-- Controls Section for Adding Variations -->
+    <div id="board-tree-section">
+        <div class="section-header">
+            <h3>Position Tree</h3>
+            <div class="tree-actions">
+                <span class="muted">Drag to pan · Scroll to zoom · Click node to navigate</span>
+                <button id="center-tree-btn" class="btn btn-secondary" type="button">Center</button>
+            </div>
+        </div>
+        <div id="board-tree-viewport">
+            <div id="board-tree-canvas"></div>
+        </div>
+    </div>
+
     <div id="controls-section">
         <h3>Add Variation</h3>
-        
+
         <div class="input-group">
-            <label for="move-select">Black's Move:</label>
-            <select id="move-select">
-                <option value="">-- Select Move --</option>
-            </select>
+            <label>Selected Move:</label>
+            <span id="selected-move-display" class="selected-move-display">None</span>
+            <button id="undo-move-btn" class="btn btn-secondary" type="button">Undo Move</button>
         </div>
 
         <div class="input-group">
             <label for="white-response-input">White's Strategy Label:</label>
-            <input 
-                type="text" 
-                id="white-response-input" 
+            <input
+                type="text"
+                id="white-response-input"
                 placeholder="e.g., Solid Defense, Aggressive Attack, Main Line"
                 maxlength="50"
             />
+            <label for="line-tag-input">Line tag:</label>
+            <input type="text" id="line-tag-input" placeholder="e.g., Anti-Sicilian family" maxlength="50" />
         </div>
 
         <div class="input-group">
             <button id="add-variation-btn" class="btn btn-primary">Add Variation</button>
             <button id="back-btn" class="btn btn-secondary">← Back</button>
             <button id="export-btn" class="btn btn-secondary">Export Tree (JSON)</button>
+            <button id="settings-btn" class="btn btn-secondary" type="button">Settings</button>
+        </div>
+
+        <h3>Import</h3>
+        <div class="input-group">
+            <textarea id="import-json-input" rows="5" placeholder='Paste tree JSON, or line format: FEN | e4 e5 Nf3 Nc6'></textarea>
+        </div>
+        <div class="input-group">
+            <button id="import-json-btn" class="btn btn-secondary" type="button">Import JSON Tree</button>
+            <button id="import-lines-btn" class="btn btn-secondary" type="button">Import Lines</button>
         </div>
 
         <div id="status-message" class="status-message"></div>
     </div>
 
+    <dialog id="settings-dialog">
+        <form method="dialog" class="settings-form">
+            <h3>Display Settings</h3>
+            <label>Theme
+                <select id="theme-select">
+                    <option value="light" selected>Light</option>
+                    <option value="dark">Dark</option>
+                </select>
+            </label>
+            <label>App background <input type="color" id="app-bg-input" value="#fafafa" /></label>
+            <label>Tree section background <input type="color" id="tree-bg-input" value="#ffffff" /></label>
+            <menu>
+                <button value="cancel" class="btn btn-secondary" type="button" id="close-settings-btn">Close</button>
+            </menu>
+        </form>
+    </dialog>
+
     <script src="./js/jquery.js"></script>
     <script src="./js/chessboard.js"></script>
-    
+
     <script type="module" src="./js/app-multi-node.js"></script>
 </body>
 </html>

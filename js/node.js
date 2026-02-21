@@ -1,11 +1,12 @@
 export class PositionNode {
-	constructor({ fen, move = null, parent = null, whiteResponse = null }) {
+	constructor({ fen, move = null, parent = null, whiteResponse = null, lineTag = null }) {
 		this.fen = fen;
 		this.move = move;
 		this.parent = parent;
 		this.children = [];
 		this.eval = null;
-		this.whiteResponse = whiteResponse; // Label for grouping by white strategy
+		this.whiteResponse = whiteResponse;
+		this.lineTag = lineTag;
 	}
 
 	addChild(node) {
@@ -20,5 +21,9 @@ export class PositionNode {
 
 	setWhiteResponse(response) {
 		this.whiteResponse = response;
+	}
+
+	setLineTag(lineTag) {
+		this.lineTag = lineTag;
 	}
 }
