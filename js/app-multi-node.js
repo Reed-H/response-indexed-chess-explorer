@@ -6,12 +6,12 @@ import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/esm/ches
 const engine = new Engine();
 const treeManager = new TreeManager(START_FEN);
 
+// DOM Elements
 const boardElement = document.getElementById('board');
 const evalBar = document.getElementById('eval-bar');
 const variationsContainer = document.getElementById('variations-container');
 const treeJsonContainer = document.getElementById('tree-json-container');
 const breadcrumb = document.getElementById('breadcrumb');
-const groupingToggle = document.getElementById('grouping-toggle');
 const selectedMoveDisplay = document.getElementById('selected-move-display');
 const whiteResponseInput = document.getElementById('white-response-input');
 const addVariationBtn = document.getElementById('add-variation-btn');
@@ -51,7 +51,18 @@ function normalizeEval(score, fen) {
 function renderEvalBar(score) {
     const clamped = Math.max(-5, Math.min(5, score));
     const percent = 50 + clamped * 10;
-    evalBar.style.height = `${percent}%`;
+    evalBar.style.height = percent + '%';
+
+    if (score > 0.5) {
+        evalBar.classList.add('white-advantage');
+        evalBar.classList.remove('black-advantage', 'equal');
+    } else if (score < -0.5) {
+        evalBar.classList.add('black-advantage');
+        evalBar.classList.remove('white-advantage', 'equal');
+    } else {
+        evalBar.classList.add('equal');
+        evalBar.classList.remove('white-advantage', 'black-advantage');
+    }
 }
 
 function updateBoard() {
@@ -149,7 +160,7 @@ function previewMove(source, target) {
     return true;
 }
 
-function onDragStart(source) {
+function onDragStart(source, piece) {
     const game = getCurrentPositionGame();
     const pieceData = game.get(source);
 
@@ -192,8 +203,10 @@ function handleBoardClick(event) {
 
     const game = getCurrentPositionGame();
 
-    if (selectedSourceSquare && previewMove(selectedSourceSquare, clickedSquare)) {
-        return;
+    if (selectedSourceSquare) {
+        if (previewMove(selectedSourceSquare, clickedSquare)) {
+            return;
+        }
     }
 
     const piece = game.get(clickedSquare);
@@ -207,37 +220,6 @@ function handleBoardClick(event) {
     clearHighlights();
 }
 
-function renderMoveCluster(title, nodes) {
-    const group = document.createElement('div');
-    group.className = 'variation-group';
-
-    const label = document.createElement('h4');
-    label.textContent = title;
-    group.appendChild(label);
-
-    const list = document.createElement('div');
-    list.className = 'variation-cluster';
-
-    for (const node of nodes) {
-        const nodeBtn = document.createElement('button');
-        nodeBtn.className = 'node-button';
-
-        let displayText = node.move.san;
-        if (node.eval !== null) {
-            displayText += ` (${node.eval.toFixed(2)})`;
-        } else {
-            displayText += ' (?)';
-        }
-
-        nodeBtn.textContent = displayText;
-        nodeBtn.onclick = () => navigateToNode(node);
-        list.appendChild(nodeBtn);
-    }
-
-    group.appendChild(list);
-    return group;
-}
-
 async function renderVariations() {
     variationsContainer.innerHTML = '';
     const children = treeManager.currentNode.children;
@@ -247,48 +229,58 @@ async function renderVariations() {
         return;
     }
 
-    const shouldGroup = groupingToggle.checked;
-    if (shouldGroup) {
-        const grouped = treeManager.getChildrenGroupedByResponse();
-        for (const [response, nodes] of Object.entries(grouped)) {
-            variationsContainer.appendChild(renderMoveCluster(response, nodes));
+    const grouped = treeManager.getChildrenGroupedByResponse();
+
+    for (const [whiteResponse, nodes] of Object.entries(grouped)) {
+        const group = document.createElement('div');
+        group.className = 'variation-group';
+
+        const title = document.createElement('h4');
+        title.textContent = whiteResponse;
+        group.appendChild(title);
+
+        for (const node of nodes) {
+            const nodeBtn = document.createElement('button');
+            nodeBtn.className = 'node-button';
+
+            let displayText = node.move.san;
+            if (node.eval !== null) {
+                displayText += ` (${node.eval.toFixed(2)})`;
+            } else {
+                displayText += ' (?)';
+            }
+
+            nodeBtn.textContent = displayText;
+            nodeBtn.onclick = () => navigateToNode(node);
+
+            group.appendChild(nodeBtn);
         }
     } else {
         variationsContainer.appendChild(renderMoveCluster('All Responses', children));
     }
 
     const unevaluatedChildren = children.filter(child => child.eval === null);
-    for (const child of unevaluatedChildren) {
-        await evaluateNode(child);
-    }
 
     if (unevaluatedChildren.length > 0) {
-        await renderVariations();
+        for (const child of unevaluatedChildren) {
+            await evaluateNode(child);
+        }
+        refreshVariationEvals();
     }
 }
 
-function renderTreeNodeFromJson(jsonNode, depth = 0) {
-    const row = document.createElement('div');
-    row.className = 'tree-node-row';
-    row.style.paddingLeft = `${depth * 14}px`;
+function refreshVariationEvals() {
+    const children = treeManager.currentNode.children;
+    const buttons = variationsContainer.querySelectorAll('.node-button');
 
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'tree-node-button';
-
-    const moveLabel = jsonNode.move?.san || 'Start';
-    const evalLabel = typeof jsonNode.eval === 'number' ? ` (${jsonNode.eval.toFixed(2)})` : '';
-    const groupLabel = jsonNode.whiteResponse ? ` · ${jsonNode.whiteResponse}` : '';
-    button.textContent = `${moveLabel}${evalLabel}${groupLabel}`;
-
-    if (jsonNode.fen === treeManager.currentNode.fen) {
-        button.classList.add('active');
-    }
-
-    button.addEventListener('click', () => {
-        const node = treeManager.getNodeByFen(jsonNode.fen);
-        if (node) {
-            navigateToNode(node);
+    buttons.forEach((btn, idx) => {
+        if (idx < children.length) {
+            const child = children[idx];
+            let displayText = child.move.san;
+            if (child.eval !== null) {
+                displayText += ` (${child.eval.toFixed(2)})`;
+            }
+            btn.textContent = displayText;
         }
     });
 
@@ -340,12 +332,11 @@ async function navigateToNode(node) {
     renderBreadcrumb();
 
     await evaluateNode(node);
-    renderEvalBar(node.eval || 0);
+    renderEvalBar(node.eval);
 
     await renderVariations();
-    renderTreeJsonView();
 
-    showStatus(node.move ? `Navigated to ${node.move.san}` : 'Navigated to start');
+    showStatus(`Navigated to ${node.move.san}`);
 }
 
 async function addVariation() {
@@ -374,7 +365,6 @@ async function addVariation() {
     const addedMoveSan = selectedMove.san;
     clearMoveSelection();
     await renderVariations();
-    renderTreeJsonView();
 
     showStatus(`Added variation: ${addedMoveSan} (${whiteResponse})`);
 }
@@ -391,7 +381,6 @@ async function goBack() {
     renderBreadcrumb();
     renderEvalBar(parent.eval || 0);
     await renderVariations();
-    renderTreeJsonView();
 
     showStatus('Went back one move');
 }
@@ -430,10 +419,8 @@ undoMoveBtn.addEventListener('click', () => {
 });
 backBtn.addEventListener('click', goBack);
 exportBtn.addEventListener('click', exportTree);
-groupingToggle.addEventListener('change', () => {
-    renderVariations();
-    renderTreeJsonView();
-});
+
+boardElement.addEventListener('click', handleBoardClick);
 
 boardElement.addEventListener('click', handleBoardClick);
 
@@ -447,7 +434,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderEvalBar(treeManager.root.eval || 0);
     clearMoveSelection();
     await renderVariations();
-    renderTreeJsonView();
 
     showStatus('Tree explorer ready! Select a move by dragging or clicking a piece.');
 });
