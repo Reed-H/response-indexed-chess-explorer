@@ -122,6 +122,7 @@ export class TreeManager {
             }
 
             for (const moveSan of moves) {
+                const beforeFullmove = Number(game.fen().split(' ')[5]);
                 const played = game.move(moveSan);
                 if (!played) break;
                 const fen = game.fen();
@@ -129,7 +130,7 @@ export class TreeManager {
                 if (!child) {
                     child = new PositionNode({
                         fen,
-                        move: { san: moveSan, ...played },
+                        move: { san: moveSan, beforeFullmove, ...played },
                         parent: parentNode,
                         whiteResponse: null,
                         lineTag: parentNode.lineTag
@@ -157,9 +158,20 @@ export class TreeManager {
     }
 
     _deserializeNode(data, parent) {
+        let enrichedMove = data.move || null;
+
+        if (parent && data.move && data.move.san && (!data.move.from || !data.move.to)) {
+            const game = new Chess(parent.fen);
+            const beforeFullmove = Number(game.fen().split(' ')[5]);
+            const played = game.move(data.move.san);
+            if (played) {
+                enrichedMove = { san: data.move.san, beforeFullmove, ...played };
+            }
+        }
+
         const node = new PositionNode({
             fen: data.fen,
-            move: data.move,
+            move: enrichedMove,
             parent,
             whiteResponse: data.whiteResponse || null,
             lineTag: data.lineTag || (parent ? parent.lineTag : null)
