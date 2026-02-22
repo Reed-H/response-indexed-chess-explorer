@@ -132,6 +132,29 @@ function handleBoardClick(event) {
   }
   clearHighlights();
 }
+function onDrop(source, target) { if (!previewMove(source, target)) { clearHighlights(); return 'snapback'; } return 'drop'; }
+function onSnapEnd() { updateBoard(); }
+function handleBoardClick(event) {
+  const sqEl = event.target.closest('.square-55d63'); if (!sqEl) return;
+  const sq = sqEl.getAttribute('data-square'); if (!sq) return;
+  const game = getCurrentPositionGame();
+  if (selectedSourceSquare) {
+    if (previewMove(selectedSourceSquare, sq)) return;
+    selectedSourceSquare = null;
+  }
+  const piece = game.get(sq);
+  if (piece && piece.color === game.turn()) {
+    selectedSourceSquare = sq;
+    highlightMovesFrom(sq);
+    return;
+  }
+  clearHighlights();
+}
+
+function evaluateNode(node) { return new Promise(resolve => {
+  if (node.eval !== null) return resolve(node.eval);
+  engine.evaluate(node.fen, 14, score => { const n = normalizeEval(score, node.fen); node.setEval(n); resolve(n); });
+}); }
 
 function evaluateNode(node) { return new Promise(resolve => {
   if (node.eval !== null) return resolve(node.eval);
@@ -316,7 +339,15 @@ async function addVariation(){
   else { clearMoveSelection(); await renderVariations(); renderTreeJsonView(); renderBoardTree(); }
   showStatus('Variation added');
 }
-async function goBack(){ const p=treeManager.goBack(); if(!p){showStatus('Already root','info'); return;} await navigateToNode(p); }
+
+async function goBack() {
+  const parent = treeManager.goBack();
+  if (!parent) {
+    showStatus('Already at root', 'info');
+    return;
+  }
+  await navigateToNode(parent);
+}
 
 function exportTree(){ const blob=new Blob([JSON.stringify(treeManager.exportTree(),null,2)],{type:'application/json'}); const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='opening-tree.json'; a.click(); URL.revokeObjectURL(u); }
 async function exportTreeImage(type='png'){ const c=await window.html2canvas(boardTreeViewport,{backgroundColor:null,scale:2}); const a=document.createElement('a'); a.href=c.toDataURL(type==='jpeg'?'image/jpeg':'image/png',0.95); a.download=`position-tree.${type}`; a.click(); }
@@ -342,7 +373,6 @@ function applySettings(){
   const t={classic:['#f0d9b5','#b58863'],green:['#eeeed2','#769656'],blue:['#dee3e6','#8ca2ad']}[boardThemeSelect.value];
   if(t){document.documentElement.style.setProperty('--light-square',t[0]);document.documentElement.style.setProperty('--dark-square',t[1]);}
 }
-async function goBack(){ const p=treeManager.goBack(); if(!p){showStatus('Already at root','info'); return;} await navigateToNode(p); }
 
 function setupPanZoom(){
   boardTreeViewport.addEventListener('mousedown',e=>{ if(e.target.closest('.board-tree-node')) return; isPanning=true; panStart={x:e.clientX-treeOffset.x,y:e.clientY-treeOffset.y}; boardTreeViewport.classList.add('panning'); });
