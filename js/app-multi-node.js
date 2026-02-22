@@ -342,6 +342,7 @@ function applySettings(){
   const t={classic:['#f0d9b5','#b58863'],green:['#eeeed2','#769656'],blue:['#dee3e6','#8ca2ad']}[boardThemeSelect.value];
   if(t){document.documentElement.style.setProperty('--light-square',t[0]);document.documentElement.style.setProperty('--dark-square',t[1]);}
 }
+async function goBack(){ const p=treeManager.goBack(); if(!p){showStatus('Already at root','info'); return;} await navigateToNode(p); }
 
 function setupPanZoom(){
   boardTreeViewport.addEventListener('mousedown',e=>{ if(e.target.closest('.board-tree-node')) return; isPanning=true; panStart={x:e.clientX-treeOffset.x,y:e.clientY-treeOffset.y}; boardTreeViewport.classList.add('panning'); });
