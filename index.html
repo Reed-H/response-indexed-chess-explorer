@@ -3,62 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <title>Response Indexed Opening Explorer</title>
-    
     <link rel="stylesheet" href="./js/chessboard.css" />
     <link rel="stylesheet" href="./css/explorer.css" />
 </head>
 <body>
-    <h1>Response Indexed Opening Explorer</h1>
-    
+    <header class="topbar">
+        <button id="menu-btn" class="icon-btn" type="button">☰</button>
+        <h1>Response Indexed Opening Explorer</h1>
+    </header>
+
+    <aside id="side-menu" class="side-menu hidden">
+        <div class="menu-profile">👤 Profile/Login (placeholder)</div>
+        <button id="settings-btn" class="btn btn-secondary" type="button">Settings</button>
+    </aside>
+
     <div id="breadcrumb"></div>
-    
+
     <div id="main-container">
-        <div id="board-section">
-            <div id="board"></div>
-            <div id="eval-bar-container">
-                <div id="eval-bar"></div>
+        <section id="live-column">
+            <div id="board-section">
+                <div id="board"></div>
+                <div id="eval-bar-container"><div id="eval-bar"></div></div>
+            </div>
+
+            <div id="controls-section">
+                <h3>Add Variation</h3>
+                <div class="input-group">
+                    <label>Selected Move:</label>
+                    <span id="selected-move-display" class="selected-move-display">None</span>
+                    <button id="undo-move-btn" class="btn btn-secondary" type="button">Undo Move</button>
+                </div>
+
+                <div class="input-group">
+                    <label for="white-response-input">White's Strategy Label:</label>
+                    <input type="text" id="white-response-input" maxlength="50" />
+                    <button class="mini-picker" id="strategy-picker-btn" type="button">▾</button>
+                </div>
+                <div id="strategy-picker" class="pill-panel hidden"></div>
+
+                <div class="input-group">
+                    <label for="line-tag-input">Line tag:</label>
+                    <input type="text" id="line-tag-input" maxlength="50" />
+                    <button class="mini-picker" id="tag-picker-btn" type="button">▾</button>
+                </div>
+                <div id="tag-picker" class="pill-panel hidden"></div>
+
+                <div class="input-group">
+                    <button id="add-variation-btn" class="btn btn-primary">Add Variation</button>
+                    <button id="back-btn" class="btn btn-secondary">← Back</button>
+                    <button id="export-btn" class="btn btn-secondary">Export JSON</button>
+                    <button id="export-png-btn" class="btn btn-secondary" type="button">Export PNG</button>
+                    <button id="export-jpeg-btn" class="btn btn-secondary" type="button">Export JPEG</button>
+                    <button id="export-pdf-btn" class="btn btn-secondary" type="button">Export PDF</button>
+                </div>
+
+                <h3>Import</h3>
+                <div class="input-group">
+                    <textarea id="import-json-input" rows="4" placeholder='Paste tree JSON, or line format: FEN | e4 e5 Nf3 Nc6'></textarea>
+                </div>
+                <div class="input-group">
+                    <button id="import-json-btn" class="btn btn-secondary" type="button">Import JSON Tree</button>
+                    <button id="import-lines-btn" class="btn btn-secondary" type="button">Import Lines</button>
+                </div>
+
+                <div id="status-message" class="status-message"></div>
+            </div>
+        </section>
+
+        <section id="right-column">
+            <div id="tree-panel">
+                <h3>Move Variations</h3>
+                <div class="tree-view-controls">
+                    <label for="grouping-toggle">Grouped</label><input type="checkbox" id="grouping-toggle" checked />
+                    <label for="clustering-toggle">Cluster</label><input type="checkbox" id="clustering-toggle" checked />
+                    <label for="cluster-topn">Top-N overlap</label>
+                    <select id="cluster-topn"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select>
+                </div>
+                <div class="tree-view-controls">
+                    <label for="black-filter">Black filter</label><select id="black-filter"><option value="">All</option></select>
+                    <label for="white-filter">White filter</label><select id="white-filter"><option value="">All</option></select>
+                </div>
+                <div id="variations-container"></div>
+                <h3>Tree (JSON View)</h3>
+                <div id="tree-json-container"></div>
+            </div>
+        </section>
+    </div>
+
+    <section id="board-tree-section">
+        <div class="section-header">
+            <h3>Position Tree</h3>
+            <div class="tree-actions">
+                <label>Align <select id="tree-align"><option value="left" selected>Left</option><option value="center">Center</option></select></label>
+                <label>Last move mark <select id="last-move-style"><option value="squares" selected>Squares</option><option value="arrows">Arrows</option></select></label>
+                <button id="center-tree-btn" class="btn btn-secondary" type="button">Center</button>
+                <button id="fullscreen-tree-btn" class="btn btn-secondary" type="button">Fullscreen</button>
             </div>
         </div>
-        
-        <div id="tree-panel">
-            <h3>Move Variations</h3>
-            <div id="variations-container"></div>
-        </div>
-    </div>
+        <div id="board-tree-viewport"><div id="board-tree-canvas"></div></div>
+    </section>
 
-    <!-- Controls Section for Adding Variations -->
-    <div id="controls-section">
-        <h3>Add Variation</h3>
-        
-        <div class="input-group">
-            <label for="move-select">Black's Move:</label>
-            <select id="move-select">
-                <option value="">-- Select Move --</option>
-            </select>
-        </div>
+    <dialog id="settings-dialog">
+        <form method="dialog" class="settings-form">
+            <h3>Display Settings</h3>
+            <label>Theme <select id="theme-select"><option value="light" selected>Light</option><option value="dark">Dark</option></select></label>
+            <label>Tree background <input type="color" id="tree-bg-input" value="#f4f6f8" /></label>
+            <label>Board colors
+                <select id="board-theme-select">
+                    <option value="classic" selected>Classic</option>
+                    <option value="green">Green</option>
+                    <option value="blue">Blue</option>
+                </select>
+            </label>
+            <button value="cancel" class="btn btn-secondary" type="button" id="close-settings-btn">Close</button>
+        </form>
+    </dialog>
 
-        <div class="input-group">
-            <label for="white-response-input">White's Strategy Label:</label>
-            <input 
-                type="text" 
-                id="white-response-input" 
-                placeholder="e.g., Solid Defense, Aggressive Attack, Main Line"
-                maxlength="50"
-            />
-        </div>
-
-        <div class="input-group">
-            <button id="add-variation-btn" class="btn btn-primary">Add Variation</button>
-            <button id="back-btn" class="btn btn-secondary">← Back</button>
-            <button id="export-btn" class="btn btn-secondary">Export Tree (JSON)</button>
-        </div>
-
-        <div id="status-message" class="status-message"></div>
-    </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="./js/jquery.js"></script>
     <script src="./js/chessboard.js"></script>
-    
     <script type="module" src="./js/app-multi-node.js"></script>
 </body>
 </html>
