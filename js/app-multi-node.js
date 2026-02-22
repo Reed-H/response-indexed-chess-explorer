@@ -6,645 +6,390 @@ import { Chess } from 'https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/esm/ches
 const engine = new Engine();
 const treeManager = new TreeManager(START_FEN);
 
-const boardElement = document.getElementById('board');
-const evalBar = document.getElementById('eval-bar');
-const variationsContainer = document.getElementById('variations-container');
-const treeJsonContainer = document.getElementById('tree-json-container');
-const boardTreeViewport = document.getElementById('board-tree-viewport');
-const boardTreeCanvas = document.getElementById('board-tree-canvas');
-const breadcrumb = document.getElementById('breadcrumb');
-const groupingToggle = document.getElementById('grouping-toggle');
-const clusterTopNSelect = document.getElementById('cluster-topn');
-const blackFilter = document.getElementById('black-filter');
-const whiteFilter = document.getElementById('white-filter');
-const selectedMoveDisplay = document.getElementById('selected-move-display');
-const whiteResponseInput = document.getElementById('white-response-input');
-const lineTagInput = document.getElementById('line-tag-input');
-const addVariationBtn = document.getElementById('add-variation-btn');
-const undoMoveBtn = document.getElementById('undo-move-btn');
-const backBtn = document.getElementById('back-btn');
-const exportBtn = document.getElementById('export-btn');
-const importJsonInput = document.getElementById('import-json-input');
-const importJsonBtn = document.getElementById('import-json-btn');
-const importLinesBtn = document.getElementById('import-lines-btn');
-const centerTreeBtn = document.getElementById('center-tree-btn');
-const settingsBtn = document.getElementById('settings-btn');
-const settingsDialog = document.getElementById('settings-dialog');
-const closeSettingsBtn = document.getElementById('close-settings-btn');
-const themeSelect = document.getElementById('theme-select');
-const appBgInput = document.getElementById('app-bg-input');
-const treeBgInput = document.getElementById('tree-bg-input');
-const statusMessage = document.getElementById('status-message');
+const $ = (id) => document.getElementById(id);
+const boardElement = $('board');
+const evalBar = $('eval-bar');
+const variationsContainer = $('variations-container');
+const treeJsonContainer = $('tree-json-container');
+const boardTreeViewport = $('board-tree-viewport');
+const boardTreeCanvas = $('board-tree-canvas');
+const boardTreeSection = $('board-tree-section');
+const breadcrumb = $('breadcrumb');
+const groupingToggle = $('grouping-toggle');
+const clusteringToggle = $('clustering-toggle');
+const clusterTopNSelect = $('cluster-topn');
+const blackFilter = $('black-filter');
+const whiteFilter = $('white-filter');
+const selectedMoveDisplay = $('selected-move-display');
+const whiteResponseInput = $('white-response-input');
+const lineTagInput = $('line-tag-input');
+const addVariationBtn = $('add-variation-btn');
+const undoMoveBtn = $('undo-move-btn');
+const backBtn = $('back-btn');
+const exportBtn = $('export-btn');
+const exportPngBtn = $('export-png-btn');
+const exportJpegBtn = $('export-jpeg-btn');
+const exportPdfBtn = $('export-pdf-btn');
+const importJsonInput = $('import-json-input');
+const importJsonBtn = $('import-json-btn');
+const importLinesBtn = $('import-lines-btn');
+const centerTreeBtn = $('center-tree-btn');
+const fullscreenTreeBtn = $('fullscreen-tree-btn');
+const treeAlignSelect = $('tree-align');
+const lastMoveStyleSelect = $('last-move-style');
+const strategyPickerBtn = $('strategy-picker-btn');
+const tagPickerBtn = $('tag-picker-btn');
+const strategyPicker = $('strategy-picker');
+const tagPicker = $('tag-picker');
+const menuBtn = $('menu-btn');
+const sideMenu = $('side-menu');
+const settingsBtn = $('settings-btn');
+const settingsDialog = $('settings-dialog');
+const closeSettingsBtn = $('close-settings-btn');
+const themeSelect = $('theme-select');
+const treeBgInput = $('tree-bg-input');
+const boardThemeSelect = $('board-theme-select');
+const statusMessage = $('status-message');
 
 let selectedMove = null;
 let selectedSourceSquare = null;
-let treeOffset = { x: 20, y: 20 };
+let treeOffset = { x: 18, y: 18 };
 let treeScale = 1;
 let isPanning = false;
 let panStart = null;
-let miniBoardInstances = [];
+let miniBoards = [];
 
-const board = Chessboard('board', {
-    position: START_FEN,
-    draggable: true,
-    onDragStart,
-    onDrop,
-    onSnapEnd
-});
+const board = Chessboard('board', { position: START_FEN, draggable: true, onDragStart, onDrop, onSnapEnd });
 
-function getCurrentPositionGame() {
-    return new Chess(treeManager.currentNode.fen);
-}
-
-function getLegalMoves() {
-    return treeManager.getLegalMoves();
+function showStatus(message, type = 'success') {
+  statusMessage.textContent = message;
+  statusMessage.className = `status-message status-${type}`;
+  setTimeout(() => { statusMessage.textContent = ''; statusMessage.className = 'status-message'; }, 2800);
 }
 
 function normalizeEval(score, fen) {
-    const sideToMove = fen.split(' ')[1];
-    return sideToMove === 'w' ? score : -score;
+  return fen.split(' ')[1] === 'w' ? score : -score;
+}
+function evalToPercent(score) { return 50 + Math.max(-5, Math.min(5, score)) * 10; }
+function renderEvalBar(score) { evalBar.style.height = `${evalToPercent(score)}%`; }
+
+function getCurrentPositionGame() { return new Chess(treeManager.currentNode.fen); }
+function getLegalMoves() { return treeManager.getLegalMoves(); }
+function updateBoard() { board.position(selectedMove ? selectedMove.fen : treeManager.currentNode.fen); }
+
+function clearHighlights() { boardElement.querySelectorAll('.square-55d63').forEach(s => s.classList.remove('move-source', 'move-target')); }
+function clearMoveSelection() {
+  selectedMove = null; selectedSourceSquare = null; clearHighlights(); selectedMoveDisplay.textContent = 'None'; undoMoveBtn.disabled = true; updateBoard();
+}
+function setSelectedMove(move) {
+  selectedMove = move; selectedSourceSquare = null; clearHighlights(); selectedMoveDisplay.textContent = move.san; undoMoveBtn.disabled = false; updateBoard();
+}
+function highlightMovesFrom(sourceSquare) {
+  clearHighlights();
+  const options = getLegalMoves().filter(m => m.from === sourceSquare);
+  boardElement.querySelector(`[data-square="${sourceSquare}"]`)?.classList.add('move-source');
+  options.forEach(m => boardElement.querySelector(`[data-square="${m.to}"]`)?.classList.add('move-target'));
+}
+function findLegalMove(source, target) { return getLegalMoves().find(m => m.from === source && m.to === target) || null; }
+function previewMove(source, target) {
+  const move = findLegalMove(source, target); if (!move) return false;
+  const game = getCurrentPositionGame(); const played = game.move({ from: source, to: target, promotion: 'q' });
+  if (!played) return false;
+  setSelectedMove({ ...move, san: played.san, fen: game.fen() });
+  return true;
+}
+function onDragStart(source) {
+  const game = getCurrentPositionGame(); const p = game.get(source);
+  if (!p || p.color !== game.turn()) return false;
+  if (!getLegalMoves().some(m => m.from === source)) return false;
+  highlightMovesFrom(source); return true;
+}
+function onDrop(source, target) { if (!previewMove(source, target)) { clearHighlights(); return 'snapback'; } return 'drop'; }
+function onSnapEnd() { updateBoard(); }
+function handleBoardClick(event) {
+  const sqEl = event.target.closest('.square-55d63'); if (!sqEl || !boardElement.contains(sqEl)) return;
+  const sq = sqEl.getAttribute('data-square'); if (!sq) return;
+  const game = getCurrentPositionGame();
+  if (selectedSourceSquare && previewMove(selectedSourceSquare, sq)) return;
+  const piece = game.get(sq); if (piece && piece.color === game.turn()) { selectedSourceSquare = sq; highlightMovesFrom(sq); return; }
+  selectedSourceSquare = null; clearHighlights();
 }
 
-function renderEvalBar(score) {
-    const clamped = Math.max(-5, Math.min(5, score));
-    evalBar.style.height = `${50 + clamped * 10}%`;
-}
-
-function updateBoard() {
-    board.position(selectedMove ? selectedMove.fen : treeManager.currentNode.fen);
-}
-
-function showStatus(message, type = 'success') {
-    statusMessage.textContent = message;
-    statusMessage.className = `status-message status-${type}`;
-    setTimeout(() => {
-        statusMessage.textContent = '';
-        statusMessage.className = 'status-message';
-    }, 3000);
-}
+function evaluateNode(node) { return new Promise(resolve => {
+  if (node.eval !== null) return resolve(node.eval);
+  engine.evaluate(node.fen, 14, (score) => { const n = normalizeEval(score, node.fen); node.setEval(n); resolve(n); });
+});}
 
 function renderBreadcrumb() {
-    const path = treeManager.getCurrentPath();
-    breadcrumb.innerHTML = path.map((node, idx) => {
-        if (idx === 0) return '<span class="breadcrumb-item">Start</span>';
-        const evalText = node.eval !== null ? ` (${node.eval.toFixed(2)})` : '';
-        const strategyText = node.whiteResponse ? ` | ${node.whiteResponse}` : '';
-        const tagText = node.lineTag ? ` #${node.lineTag}` : '';
-        return `<span class="breadcrumb-item"> > ${node.move.san}${evalText}${strategyText}${tagText}</span>`;
-    }).join('');
+  const path = treeManager.getCurrentPath();
+  breadcrumb.innerHTML = path.map((n, i) => {
+    if (i === 0) return '<span>Start</span>';
+    const moveNum = n.move?.beforeFullmove || '';
+    const piece = `${moveNum ? moveNum + '.' : ''}${n.move?.san || ''}`;
+    return `<span> > ${piece}${n.whiteResponse ? ` | ${n.whiteResponse}` : ''}${n.lineTag ? ` #${n.lineTag}` : ''}</span>`;
+  }).join('');
 }
 
-function evaluateNode(node) {
-    return new Promise(resolve => {
-        if (node.eval !== null) return resolve(node.eval);
-        engine.evaluate(node.fen, 15, score => {
-            const normalized = normalizeEval(score, node.fen);
-            node.setEval(normalized);
-            resolve(normalized);
-        });
-    });
-}
-
-function clearHighlights() {
-    boardElement.querySelectorAll('.square-55d63').forEach(squareEl => {
-        squareEl.classList.remove('move-source', 'move-target');
-    });
-}
-
-function clearMoveSelection() {
-    selectedMove = null;
-    selectedSourceSquare = null;
-    clearHighlights();
-    selectedMoveDisplay.textContent = 'None';
-    undoMoveBtn.disabled = true;
-    updateBoard();
-}
-
-function setSelectedMove(move) {
-    selectedMove = move;
-    selectedSourceSquare = null;
-    clearHighlights();
-    selectedMoveDisplay.textContent = move.san;
-    undoMoveBtn.disabled = false;
-    updateBoard();
-}
-
-function highlightMovesFrom(sourceSquare) {
-    clearHighlights();
-    const legalMovesFromSource = getLegalMoves().filter(move => move.from === sourceSquare);
-    if (legalMovesFromSource.length === 0) return;
-
-    boardElement.querySelector(`[data-square="${sourceSquare}"]`)?.classList.add('move-source');
-    legalMovesFromSource.forEach(move => {
-        boardElement.querySelector(`[data-square="${move.to}"]`)?.classList.add('move-target');
-    });
-}
-
-function findLegalMove(source, target) {
-    return getLegalMoves().find(move => move.from === source && move.to === target) || null;
-}
-
-function previewMove(source, target) {
-    const move = findLegalMove(source, target);
-    if (!move) return false;
-
-    const game = getCurrentPositionGame();
-    const playedMove = game.move({ from: source, to: target, promotion: 'q' });
-    if (!playedMove) return false;
-
-    setSelectedMove({ ...move, san: playedMove.san, fen: game.fen() });
-    return true;
-}
-
-function onDragStart(source) {
-    const game = getCurrentPositionGame();
-    const pieceData = game.get(source);
-    if (!pieceData || pieceData.color !== game.turn()) return false;
-    if (!getLegalMoves().some(move => move.from === source)) return false;
-    highlightMovesFrom(source);
-    return true;
-}
-
-function onDrop(source, target) {
-    if (!previewMove(source, target)) {
-        clearHighlights();
-        return 'snapback';
-    }
-    return 'drop';
-}
-
-function onSnapEnd() {
-    updateBoard();
-}
-
-function handleBoardClick(event) {
-    const squareElement = event.target.closest('.square-55d63');
-    if (!squareElement || !boardElement.contains(squareElement)) return;
-
-    const clickedSquare = squareElement.getAttribute('data-square');
-    if (!clickedSquare) return;
-
-    const game = getCurrentPositionGame();
-    if (selectedSourceSquare && previewMove(selectedSourceSquare, clickedSquare)) return;
-
-    const piece = game.get(clickedSquare);
-    if (piece && piece.color === game.turn()) {
-        selectedSourceSquare = clickedSquare;
-        highlightMovesFrom(clickedSquare);
-        return;
-    }
-
-    selectedSourceSquare = null;
-    clearHighlights();
-}
-
-function getTopWhiteMoves(node, topN) {
-    return node.children
-        .slice()
-        .sort((a, b) => (b.eval ?? -999) - (a.eval ?? -999))
-        .slice(0, topN)
-        .map(child => child.move?.san)
-        .filter(Boolean);
+function getTopWhiteMoves(node, n) {
+  return node.children.slice().sort((a,b)=>(b.eval??-999)-(a.eval??-999)).slice(0,n).map(c=>`${c.move?.san}|${c.whiteResponse||''}`).filter(Boolean);
 }
 
 function clusterBlackResponses(nodes, topN) {
-    const clusters = [];
+  const out = [];
+  for (const node of nodes) {
+    const only = node.children.length === 1 ? `${node.children[0].move?.san}|${node.children[0].whiteResponse||''}` : null;
+    const top = new Set(getTopWhiteMoves(node, topN));
+    let group = out.find(g => (only && g.only && g.only === only) || [...top].some(t => g.top.has(t)));
+    if (!group) { group = { only, top: new Set(top), nodes: [] }; out.push(group); }
+    if (!group.only && only) group.only = only;
+    top.forEach(t => group.top.add(t));
+    group.nodes.push(node);
+  }
+  return out.map((g, i) => ({ label: g.only ? `Shared response: ${g.only}` : `Cluster ${i+1}`, nodes: g.nodes }));
+}
 
-    for (const node of nodes) {
-        const nodeSingleWhite = node.children.length === 1 ? node.children[0].move?.san : null;
-        const nodeTopMoves = new Set(getTopWhiteMoves(node, topN));
+function refreshPickersAndFilters() {
+  const all = treeManager.getAllNodes();
+  const strategies = [...new Set(all.map(n => n.whiteResponse).filter(Boolean))].sort();
+  const tags = [...new Set(all.map(n => n.lineTag).filter(Boolean))].sort();
+  const blacks = [...new Set(all.map(n => n.move?.san).filter(Boolean))].sort();
 
-        let cluster = clusters.find(c => {
-            if (c.singleWhite && nodeSingleWhite && c.singleWhite === nodeSingleWhite) return true;
-            for (const move of nodeTopMoves) {
-                if (c.topMoves.has(move)) return true;
-            }
-            return false;
-        });
-
-        if (!cluster) {
-            cluster = {
-                label: 'Cluster',
-                singleWhite: nodeSingleWhite,
-                topMoves: new Set(nodeTopMoves),
-                nodes: []
-            };
-            clusters.push(cluster);
-        }
-
-        cluster.nodes.push(node);
-        if (nodeSingleWhite && !cluster.singleWhite) cluster.singleWhite = nodeSingleWhite;
-        nodeTopMoves.forEach(move => cluster.topMoves.add(move));
-    }
-
-    return clusters.map((cluster, idx) => ({
-        label: cluster.singleWhite ? `Shared white: ${cluster.singleWhite}` : `Cluster ${idx + 1}`,
-        nodes: cluster.nodes
-    }));
+  blackFilter.innerHTML = '<option value="">All</option>' + blacks.map(v=>`<option value="${v}">${v}</option>`).join('');
+  whiteFilter.innerHTML = '<option value="">All</option>' + strategies.map(v=>`<option value="${v}">${v}</option>`).join('');
+  strategyPicker.innerHTML = strategies.map(v=>`<button class="pill" data-value="${v}" type="button">${v}</button>`).join('');
+  tagPicker.innerHTML = tags.map(v=>`<button class="pill" data-value="${v}" type="button">${v}</button>`).join('');
 }
 
 function getFilteredChildren() {
-    return treeManager.currentNode.children.filter(node => {
-        if (blackFilter.value && node.move?.san !== blackFilter.value) return false;
-        if (whiteFilter.value && (node.whiteResponse || '') !== whiteFilter.value) return false;
-        return true;
-    });
+  return treeManager.currentNode.children.filter(n => (!blackFilter.value || n.move?.san === blackFilter.value) && (!whiteFilter.value || (n.whiteResponse||'') === whiteFilter.value));
 }
 
 function renderMoveCluster(title, nodes) {
-    const group = document.createElement('div');
-    group.className = 'variation-group';
-
-    const label = document.createElement('h4');
-    label.textContent = `${title} (${nodes.length})`;
-    group.appendChild(label);
-
-    const list = document.createElement('div');
-    list.className = 'variation-cluster';
-
-    for (const node of nodes) {
-        const nodeBtn = document.createElement('button');
-        nodeBtn.className = 'node-button';
-        const evalText = node.eval !== null ? ` (${node.eval.toFixed(2)})` : ' (?)';
-        const tagText = node.lineTag ? ` #${node.lineTag}` : '';
-        nodeBtn.textContent = `${node.move.san}${evalText}${tagText}`;
-        nodeBtn.onclick = () => navigateToNode(node);
-        list.appendChild(nodeBtn);
-    }
-
-    group.appendChild(list);
-    return group;
-}
-
-function refreshStrategyFilters() {
-    const allNodes = treeManager.getAllNodes();
-    const blackLabels = [...new Set(allNodes.map(n => n.move?.san).filter(Boolean))].sort();
-    const whiteLabels = [...new Set(allNodes.map(n => n.whiteResponse).filter(Boolean))].sort();
-
-    const currentBlack = blackFilter.value;
-    const currentWhite = whiteFilter.value;
-
-    blackFilter.innerHTML = '<option value="">All</option>' + blackLabels.map(label => `<option value="${label}">${label}</option>`).join('');
-    whiteFilter.innerHTML = '<option value="">All</option>' + whiteLabels.map(label => `<option value="${label}">${label}</option>`).join('');
-
-    blackFilter.value = blackLabels.includes(currentBlack) ? currentBlack : '';
-    whiteFilter.value = whiteLabels.includes(currentWhite) ? currentWhite : '';
+  const g = document.createElement('div'); g.className = 'variation-group';
+  g.innerHTML = `<h4>${title} (${nodes.length})</h4>`;
+  const wrap = document.createElement('div'); wrap.className='variation-cluster';
+  nodes.forEach(node => {
+    const b = document.createElement('button'); b.className='node-button';
+    const ply = node.move?.beforeFullmove ? `${node.move.beforeFullmove}${node.move.color==='w'?'.':'...'} ` : '';
+    b.textContent = `${ply}${node.move?.san || ''} ${node.eval!==null?`(${node.eval.toFixed(2)})`:'(?)'}`;
+    b.onclick = ()=>navigateToNode(node); wrap.appendChild(b);
+  });
+  g.appendChild(wrap); return g;
 }
 
 async function renderVariations() {
-    variationsContainer.innerHTML = '';
-    const children = getFilteredChildren();
+  variationsContainer.innerHTML = '';
+  const children = getFilteredChildren();
+  if (!children.length) { variationsContainer.innerHTML='<p><em>No matching variations.</em></p>'; return; }
 
-    if (children.length === 0) {
-        variationsContainer.innerHTML = '<p><em>No matching variations.</em></p>';
-        return;
-    }
-
-    const topN = Number(clusterTopNSelect.value || 2);
-    if (groupingToggle.checked) {
-        const grouped = treeManager.getChildrenGroupedByResponse();
-        for (const [response, nodes] of Object.entries(grouped)) {
-            const filtered = nodes.filter(n => children.includes(n));
-            if (filtered.length) variationsContainer.appendChild(renderMoveCluster(response, filtered));
-        }
-        const clustered = clusterBlackResponses(children, topN);
-        clustered.forEach(cluster => variationsContainer.appendChild(renderMoveCluster(cluster.label, cluster.nodes)));
-    } else {
-        variationsContainer.appendChild(renderMoveCluster('All Responses', children));
-    }
-
-    const unevaluatedChildren = children.filter(child => child.eval === null);
-    for (const child of unevaluatedChildren) {
-        await evaluateNode(child);
-    }
-}
-
-function renderTreeNodeFromJson(jsonNode, depth = 0) {
-    const row = document.createElement('div');
-    row.className = 'tree-node-row';
-    row.style.paddingLeft = `${depth * 14}px`;
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'tree-node-button';
-
-    const moveLabel = jsonNode.move?.san || 'Start';
-    const evalLabel = typeof jsonNode.eval === 'number' ? ` (${jsonNode.eval.toFixed(2)})` : '';
-    const groupLabel = jsonNode.whiteResponse ? ` · ${jsonNode.whiteResponse}` : '';
-    const tagLabel = jsonNode.lineTag ? ` #${jsonNode.lineTag}` : '';
-    button.textContent = `${moveLabel}${evalLabel}${groupLabel}${tagLabel}`;
-
-    if (jsonNode.fen === treeManager.currentNode.fen) button.classList.add('active');
-
-    button.addEventListener('click', () => {
-        const node = treeManager.getNodeByFen(jsonNode.fen);
-        if (node) navigateToNode(node);
+  if (groupingToggle.checked) {
+    const grouped = treeManager.getChildrenGroupedByResponse();
+    Object.entries(grouped).forEach(([k,v]) => {
+      const filtered = v.filter(x=>children.includes(x)); if (filtered.length) variationsContainer.appendChild(renderMoveCluster(k, filtered));
     });
+  } else {
+    variationsContainer.appendChild(renderMoveCluster('All responses', children));
+  }
 
-    row.appendChild(button);
+  if (clusteringToggle.checked) {
+    const topN = Number(clusterTopNSelect.value || 2);
+    clusterBlackResponses(children, topN).forEach(c => variationsContainer.appendChild(renderMoveCluster(c.label, c.nodes)));
+  }
 
-    const fragment = document.createDocumentFragment();
-    fragment.appendChild(row);
-    for (const child of (jsonNode.children || [])) {
-        fragment.appendChild(renderTreeNodeFromJson(child, depth + 1));
-    }
-    return fragment;
+  for (const child of children.filter(c=>c.eval===null)) await evaluateNode(child);
 }
 
-function renderTreeJsonView() {
-    treeJsonContainer.innerHTML = '';
-    treeJsonContainer.appendChild(renderTreeNodeFromJson(treeManager.exportTree().root));
+function renderTreeJsonViewNode(jsonNode, depth=0, idx=1, moveNumber='') {
+  const row = document.createElement('div'); row.style.paddingLeft = `${depth*14}px`;
+  const b = document.createElement('button'); b.className='tree-node-button';
+  const numbering = jsonNode.move ? `${moveNumber || idx}. ` : '';
+  b.textContent = `${numbering}${jsonNode.move?.san || 'Start'}${typeof jsonNode.eval==='number'?` (${jsonNode.eval.toFixed(2)})`:''}`;
+  if (jsonNode.fen === treeManager.currentNode.fen) b.classList.add('active');
+  b.onclick = ()=>{ const node = treeManager.getNodeByFen(jsonNode.fen); if (node) navigateToNode(node); };
+  row.appendChild(b);
+  const frag = document.createDocumentFragment(); frag.appendChild(row);
+  (jsonNode.children||[]).forEach((child, i) => frag.appendChild(renderTreeJsonViewNode(child, depth+1, i+1, `${idx}.${i+1}`)));
+  return frag;
 }
+function renderTreeJsonView() { treeJsonContainer.innerHTML=''; treeJsonContainer.appendChild(renderTreeJsonViewNode(treeManager.exportTree().root)); }
 
 function computeTreeLayout() {
-    const levels = [];
-    const queue = [{ node: treeManager.root, depth: 0 }];
-    while (queue.length) {
-        const { node, depth } = queue.shift();
-        if (!levels[depth]) levels[depth] = [];
-        levels[depth].push(node);
-        node.children.forEach(child => queue.push({ node: child, depth: depth + 1 }));
-    }
+  const levels = []; const q=[{node:treeManager.root,depth:0}];
+  while(q.length){const {node,depth}=q.shift(); if(!levels[depth])levels[depth]=[]; levels[depth].push(node); node.children.forEach(c=>q.push({node:c,depth:depth+1}));}
+  const spacingX=190, spacingY=190, pos = new Map();
+  levels.forEach((nodes,d)=>nodes.forEach((n,i)=>{
+    const offset = treeAlignSelect.value === 'center' ? ((Math.max(...levels.map(l=>l.length))-nodes.length)*spacingX)/2 : 0;
+    pos.set(n.fen,{x:i*spacingX+offset,y:d*spacingY});
+  }));
+  return {levels,pos,width:(Math.max(...levels.map(l=>l.length))+2)*spacingX,height:levels.length*spacingY+80};
+}
 
-    const positions = new Map();
-    const spacingX = 170;
-    const spacingY = 165;
+function getPathSet(){ return new Set(treeManager.getCurrentPath().map(n=>n.fen)); }
+function clearMiniBoards(){ miniBoards.forEach(b=>b.destroy?.()); miniBoards=[]; }
+function applyTreeTransform(){ boardTreeCanvas.style.transform=`translate(${treeOffset.x}px,${treeOffset.y}px) scale(${treeScale})`; }
 
-    levels.forEach((nodes, depth) => {
-        nodes.forEach((node, idx) => {
-            positions.set(node.fen, {
-                x: idx * spacingX,
-                y: depth * spacingY
-            });
-        });
+function squareToCoords(square, boardSize=122) {
+  if (!square) return null;
+  const file = square.charCodeAt(0)-97; const rank = Number(square[1])-1;
+  const cell = boardSize/8;
+  return { x:file*cell, y:(7-rank)*cell, cell };
+}
+
+function addLastMoveMark(overlay, move) {
+  if (!move?.from || !move?.to) return;
+  const from = squareToCoords(move.from), to = squareToCoords(move.to);
+  if (!from || !to) return;
+  if (lastMoveStyleSelect.value === 'squares') {
+    [from,to].forEach(pt=>{
+      const m=document.createElement('div'); m.className='last-move-square'; m.style.left=`${pt.x}px`; m.style.top=`${pt.y}px`; m.style.width=`${pt.cell}px`; m.style.height=`${pt.cell}px`; overlay.appendChild(m);
     });
-
-    return { levels, positions, width: (Math.max(...levels.map(l => l.length)) + 1) * 170, height: levels.length * 165 + 40 };
-}
-
-function getLineSetForCurrentNode() {
-    return new Set(treeManager.getCurrentPath().map(node => node.fen));
-}
-
-function clearMiniBoards() {
-    miniBoardInstances.forEach(instance => instance.destroy?.());
-    miniBoardInstances = [];
-}
-
-function applyTreeTransform() {
-    boardTreeCanvas.style.transform = `translate(${treeOffset.x}px, ${treeOffset.y}px) scale(${treeScale})`;
+  } else {
+    const a=document.createElement('div'); a.className='last-move-arrow';
+    const sx=from.x+from.cell/2, sy=from.y+from.cell/2, ex=to.x+to.cell/2, ey=to.y+to.cell/2;
+    const dx=ex-sx, dy=ey-sy, len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx)*180/Math.PI;
+    a.style.left=`${sx}px`; a.style.top=`${sy}px`; a.style.width=`${len}px`; a.style.transform=`rotate(${ang}deg)`; overlay.appendChild(a);
+  }
 }
 
 function renderBoardTree() {
-    clearMiniBoards();
-    boardTreeCanvas.innerHTML = '';
+  clearMiniBoards(); boardTreeCanvas.innerHTML='';
+  const {levels,pos,width,height}=computeTreeLayout();
+  boardTreeCanvas.style.width=`${width}px`; boardTreeCanvas.style.height=`${height}px`;
+  const line = getPathSet();
 
-    const { levels, positions, width, height } = computeTreeLayout();
-    boardTreeCanvas.style.width = `${width}px`;
-    boardTreeCanvas.style.height = `${height}px`;
+  levels.forEach(nodes=>nodes.forEach(node=>{
+    const {x,y}=pos.get(node.fen);
+    const wrap=document.createElement('div'); wrap.className='board-tree-node'; wrap.style.left=`${x}px`; wrap.style.top=`${y}px`;
+    if(!line.has(node.fen)) wrap.classList.add('dimmed'); if(node.fen===treeManager.currentNode.fen) wrap.classList.add('active');
 
-    const lineSet = getLineSetForCurrentNode();
+    const miniWrap=document.createElement('div'); miniWrap.className='mini-node-wrap';
+    const mini=document.createElement('div'); mini.className='mini-board'; mini.id=`mb-${Math.random().toString(36).slice(2,9)}`;
+    const overlay=document.createElement('div'); overlay.style.position='absolute'; overlay.style.inset='0';
+    addLastMoveMark(overlay, node.move);
 
-    for (const levelNodes of levels) {
-        for (const node of levelNodes) {
-            const { x, y } = positions.get(node.fen);
-            const wrapper = document.createElement('div');
-            wrapper.className = 'board-tree-node';
-            wrapper.style.left = `${x}px`;
-            wrapper.style.top = `${y}px`;
-            if (!lineSet.has(node.fen)) wrapper.classList.add('dimmed');
-            if (node.fen === treeManager.currentNode.fen) wrapper.classList.add('active');
+    const ev=document.createElement('div'); ev.className='node-eval-bar';
+    const evFill=document.createElement('div'); evFill.className='node-eval-fill'; evFill.style.height=`${evalToPercent(node.eval ?? 0)}%`; ev.appendChild(evFill);
 
-            const miniBoardEl = document.createElement('div');
-            miniBoardEl.className = 'mini-board';
-            miniBoardEl.id = `mini-${Math.random().toString(36).slice(2, 10)}`;
+    miniWrap.appendChild(mini); miniWrap.appendChild(overlay); miniWrap.appendChild(ev);
+    const ply = node.move?.beforeFullmove ? `${node.move.beforeFullmove}${node.move.color==='w'?'.':'...'} ` : '';
+    const cap=document.createElement('div'); cap.className='mini-caption'; cap.textContent=`${ply}${node.move?.san||'Start'} ${typeof node.eval==='number'?node.eval.toFixed(2):'?'}`;
+    wrap.appendChild(miniWrap); wrap.appendChild(cap); wrap.onclick=()=>navigateToNode(node);
+    boardTreeCanvas.appendChild(wrap);
+    miniBoards.push(Chessboard(mini.id,{position:node.fen,draggable:false,showNotation:false}));
 
-            const caption = document.createElement('div');
-            caption.className = 'mini-caption';
-            const moveLabel = node.move?.san || 'Start';
-            const evalText = typeof node.eval === 'number' ? ` ${node.eval.toFixed(2)}` : ' ?';
-            caption.textContent = `${moveLabel}${evalText}`;
-
-            wrapper.appendChild(miniBoardEl);
-            wrapper.appendChild(caption);
-            wrapper.addEventListener('click', () => navigateToNode(node));
-
-            boardTreeCanvas.appendChild(wrapper);
-            miniBoardInstances.push(Chessboard(miniBoardEl.id, {
-                position: node.fen,
-                draggable: false,
-                showNotation: false
-            }));
-
-            if (node.parent) {
-                const parentPos = positions.get(node.parent.fen);
-                const edge = document.createElement('div');
-                edge.className = 'board-tree-edge';
-                if (!lineSet.has(node.fen) || !lineSet.has(node.parent.fen)) edge.classList.add('dimmed');
-
-                const startX = parentPos.x + 58;
-                const startY = parentPos.y + 120;
-                const endX = x + 58;
-                const endY = y;
-                const dx = endX - startX;
-                const dy = endY - startY;
-                const length = Math.hypot(dx, dy);
-                const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-                edge.style.width = `${length}px`;
-                edge.style.left = `${startX}px`;
-                edge.style.top = `${startY}px`;
-                edge.style.transform = `rotate(${angle}deg)`;
-                boardTreeCanvas.appendChild(edge);
-            }
-        }
+    if(node.parent){
+      const p=pos.get(node.parent.fen); const e=document.createElement('div'); e.className='board-tree-edge';
+      if(!line.has(node.fen)||!line.has(node.parent.fen)) e.classList.add('dimmed');
+      const sx=p.x+61, sy=p.y+124, ex=x+61, ey=y; const dx=ex-sx, dy=ey-sy, len=Math.hypot(dx,dy), ang=Math.atan2(dy,dx)*180/Math.PI;
+      e.style.left=`${sx}px`; e.style.top=`${sy}px`; e.style.width=`${len}px`; e.style.transform=`rotate(${ang}deg)`; boardTreeCanvas.appendChild(e);
     }
-
-    applyTreeTransform();
+  }));
+  applyTreeTransform();
 }
 
-async function navigateToNode(node) {
-    treeManager.navigateToNode(node);
-    clearMoveSelection();
-    lineTagInput.value = treeManager.currentNode.lineTag || '';
-    renderBreadcrumb();
-
-    await evaluateNode(node);
-    renderEvalBar(node.eval || 0);
-
-    refreshStrategyFilters();
-    await renderVariations();
-    renderTreeJsonView();
-    renderBoardTree();
-
-    showStatus(node.move ? `Navigated to ${node.move.san}` : 'Navigated to start');
+async function navigateToNode(node){
+  treeManager.navigateToNode(node); clearMoveSelection(); lineTagInput.value = treeManager.currentNode.lineTag || '';
+  renderBreadcrumb(); await evaluateNode(node); renderEvalBar(node.eval || 0);
+  refreshPickersAndFilters(); await renderVariations(); renderTreeJsonView(); renderBoardTree();
 }
 
-async function addVariation() {
-    const whiteResponse = whiteResponseInput.value.trim();
-    const lineTag = lineTagInput.value.trim() || null;
+async function addVariation(){
+  if(!selectedMove){ showStatus('Select a move on the board first','error'); return; }
+  const node=treeManager.createChildNode(selectedMove.san, whiteResponseInput.value.trim()||null, lineTagInput.value.trim()||null);
+  if(!node){ showStatus('Invalid move','error'); return; }
+  await evaluateNode(node); whiteResponseInput.value=''; clearMoveSelection();
+  refreshPickersAndFilters(); await renderVariations(); renderTreeJsonView(); renderBoardTree(); showStatus('Variation added');
+}
+async function goBack(){ const p=treeManager.goBack(); if(!p){showStatus('Already at root','info'); return;} await navigateToNode(p); }
 
-    if (!selectedMove) {
-        showStatus('Select a move on the board first', 'error');
-        return;
-    }
-
-    const newNode = treeManager.createChildNode(selectedMove.san, whiteResponse || null, lineTag);
-    if (!newNode) {
-        showStatus('Invalid move', 'error');
-        return;
-    }
-
-    await evaluateNode(newNode);
-
-    whiteResponseInput.value = '';
-    clearMoveSelection();
-
-    refreshStrategyFilters();
-    await renderVariations();
-    renderTreeJsonView();
-    renderBoardTree();
-    showStatus(`Added variation: ${selectedMove?.san || newNode.move.san}`);
+function exportTree(){
+  const blob = new Blob([JSON.stringify(treeManager.exportTree(),null,2)], {type:'application/json'});
+  const u=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=u; a.download='opening-tree.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(u);
 }
 
-async function goBack() {
-    const parent = treeManager.goBack();
-    if (!parent) {
-        showStatus('Already at root', 'info');
-        return;
-    }
-    await navigateToNode(parent);
+async function exportTreeImage(type='png') {
+  const canvas = await window.html2canvas(boardTreeViewport, { backgroundColor: null, scale: 2 });
+  const mime = type==='jpeg' ? 'image/jpeg' : 'image/png';
+  const data = canvas.toDataURL(mime, 0.95);
+  const a=document.createElement('a'); a.href=data; a.download=`position-tree.${type}`; a.click();
 }
 
-function exportTree() {
-    const json = JSON.stringify(treeManager.exportTree(), null, 2);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `opening-tree-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    showStatus('Tree exported successfully');
+async function exportTreePdf() {
+  const canvas = await window.html2canvas(boardTreeViewport, { backgroundColor: null, scale: 2 });
+  const img = canvas.toDataURL('image/png');
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const w = pdf.internal.pageSize.getWidth(); const h = pdf.internal.pageSize.getHeight();
+  pdf.addImage(img, 'PNG', 20, 20, w-40, h-40); pdf.save('position-tree.pdf');
 }
 
-async function importJsonTree() {
-    try {
-        const parsed = JSON.parse(importJsonInput.value);
-        treeManager.importTree(parsed);
-        clearMoveSelection();
-        await evaluateNode(treeManager.root);
-        renderEvalBar(treeManager.root.eval || 0);
-        refreshStrategyFilters();
-        await renderVariations();
-        renderBreadcrumb();
-        renderTreeJsonView();
-        renderBoardTree();
-        showStatus('JSON tree imported');
-    } catch (error) {
-        showStatus(`Import failed: ${error.message}`, 'error');
-    }
+async function importJsonTree(){ try{ treeManager.importTree(JSON.parse(importJsonInput.value)); await navigateToNode(treeManager.root); showStatus('JSON tree imported'); } catch(e){ showStatus(`Import failed: ${e.message}`,'error'); } }
+async function importLines(){ try{ const n=treeManager.importLines(importJsonInput.value); await renderVariations(); renderTreeJsonView(); renderBoardTree(); refreshPickersAndFilters(); showStatus(`Imported ${n} line(s)`);}catch(e){showStatus(`Line import failed: ${e.message}`,'error');} }
+
+function applySettings(){
+  document.body.classList.toggle('theme-dark', themeSelect.value === 'dark');
+  document.documentElement.style.setProperty('--tree-bg', treeBgInput.value);
+  const themes = {
+    classic: ['#f0d9b5','#b58863'],
+    green: ['#eeeed2','#769656'],
+    blue: ['#dee3e6','#8ca2ad']
+  };
+  const [light,dark] = themes[boardThemeSelect.value] || themes.classic;
+  document.documentElement.style.setProperty('--light-square', light);
+  document.documentElement.style.setProperty('--dark-square', dark);
 }
 
-async function importLines() {
-    try {
-        const importedCount = treeManager.importLines(importJsonInput.value);
-        refreshStrategyFilters();
-        await renderVariations();
-        renderTreeJsonView();
-        renderBoardTree();
-        showStatus(`Imported ${importedCount} line(s)`);
-    } catch (error) {
-        showStatus(`Line import failed: ${error.message}`, 'error');
-    }
+function setupPanZoom(){
+  boardTreeViewport.addEventListener('mousedown', e=>{ if(e.target.closest('.board-tree-node')) return; isPanning=true; panStart={x:e.clientX-treeOffset.x,y:e.clientY-treeOffset.y}; boardTreeViewport.classList.add('panning'); });
+  window.addEventListener('mousemove', e=>{ if(!isPanning) return; treeOffset={x:e.clientX-panStart.x,y:e.clientY-panStart.y}; applyTreeTransform(); });
+  window.addEventListener('mouseup', ()=>{ isPanning=false; boardTreeViewport.classList.remove('panning'); });
+  boardTreeViewport.addEventListener('wheel', e=>{ e.preventDefault(); treeScale=Math.max(.45,Math.min(1.8,treeScale+(e.deltaY<0?0.08:-0.08))); applyTreeTransform(); }, {passive:false});
 }
+function centerTree(){ treeOffset={x:18,y:18}; treeScale=1; applyTreeTransform(); }
+async function toggleFullscreenTree(){ if(!document.fullscreenElement) await boardTreeSection.requestFullscreen?.(); else await document.exitFullscreen(); }
 
-function openSettings() {
-    settingsDialog.showModal();
-}
-
-function applySettings() {
-    document.documentElement.style.setProperty('--app-bg', appBgInput.value);
-    document.documentElement.style.setProperty('--tree-bg', treeBgInput.value);
-    document.body.classList.toggle('theme-dark', themeSelect.value === 'dark');
-}
-
-function setupTreePanZoom() {
-    boardTreeViewport.addEventListener('mousedown', (event) => {
-        if (event.target.closest('.board-tree-node')) return;
-        isPanning = true;
-        panStart = { x: event.clientX - treeOffset.x, y: event.clientY - treeOffset.y };
-        boardTreeViewport.classList.add('panning');
-    });
-
-    window.addEventListener('mousemove', (event) => {
-        if (!isPanning) return;
-        treeOffset = { x: event.clientX - panStart.x, y: event.clientY - panStart.y };
-        applyTreeTransform();
-    });
-
-    window.addEventListener('mouseup', () => {
-        isPanning = false;
-        boardTreeViewport.classList.remove('panning');
-    });
-
-    boardTreeViewport.addEventListener('wheel', (event) => {
-        event.preventDefault();
-        treeScale = Math.max(0.45, Math.min(1.8, treeScale + (event.deltaY < 0 ? 0.08 : -0.08)));
-        applyTreeTransform();
-    }, { passive: false });
-}
-
-function centerTree() {
-    treeOffset = { x: 20, y: 20 };
-    treeScale = 1;
-    applyTreeTransform();
+function wirePickers(){
+  strategyPicker.onclick = (e)=>{ const b=e.target.closest('.pill'); if(!b) return; whiteResponseInput.value = b.dataset.value; };
+  tagPicker.onclick = (e)=>{ const b=e.target.closest('.pill'); if(!b) return; lineTagInput.value = b.dataset.value; };
 }
 
 addVariationBtn.addEventListener('click', addVariation);
-undoMoveBtn.addEventListener('click', () => {
-    clearMoveSelection();
-    showStatus('Move selection undone', 'info');
-});
+undoMoveBtn.addEventListener('click', ()=>{ clearMoveSelection(); showStatus('Move selection undone','info'); });
 backBtn.addEventListener('click', goBack);
 exportBtn.addEventListener('click', exportTree);
+exportPngBtn.addEventListener('click', ()=>exportTreeImage('png'));
+exportJpegBtn.addEventListener('click', ()=>exportTreeImage('jpeg'));
+exportPdfBtn.addEventListener('click', exportTreePdf);
 importJsonBtn.addEventListener('click', importJsonTree);
 importLinesBtn.addEventListener('click', importLines);
 centerTreeBtn.addEventListener('click', centerTree);
+fullscreenTreeBtn.addEventListener('click', toggleFullscreenTree);
+[groupingToggle, clusteringToggle, clusterTopNSelect, blackFilter, whiteFilter, treeAlignSelect, lastMoveStyleSelect].forEach(c=>c.addEventListener('change', async ()=>{ await renderVariations(); renderTreeJsonView(); renderBoardTree(); }));
 boardElement.addEventListener('click', handleBoardClick);
 
-[groupingToggle, clusterTopNSelect, blackFilter, whiteFilter].forEach(control => {
-    control.addEventListener('change', async () => {
-        await renderVariations();
-        renderTreeJsonView();
-        renderBoardTree();
-    });
-});
+menuBtn.addEventListener('click', ()=>sideMenu.classList.toggle('hidden'));
+settingsBtn.addEventListener('click', ()=>settingsDialog.showModal());
+closeSettingsBtn.addEventListener('click', ()=>settingsDialog.close());
+[themeSelect, treeBgInput, boardThemeSelect].forEach(el=>el.addEventListener('input', ()=>{ applySettings(); renderBoardTree(); }));
+strategyPickerBtn.addEventListener('click', ()=>strategyPicker.classList.toggle('hidden'));
+tagPickerBtn.addEventListener('click', ()=>tagPicker.classList.toggle('hidden'));
+wirePickers();
 
-whiteResponseInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') addVariation();
-});
-
-settingsBtn.addEventListener('click', openSettings);
-closeSettingsBtn.addEventListener('click', () => settingsDialog.close());
-[themeSelect, appBgInput, treeBgInput].forEach(input => input.addEventListener('input', applySettings));
+setupPanZoom();
 
 document.addEventListener('DOMContentLoaded', async () => {
-    setupTreePanZoom();
-    applySettings();
-    await evaluateNode(treeManager.root);
-    lineTagInput.value = treeManager.root.lineTag || '';
-    renderBreadcrumb();
-    renderEvalBar(treeManager.root.eval || 0);
-    clearMoveSelection();
-    refreshStrategyFilters();
-    await renderVariations();
-    renderTreeJsonView();
-    renderBoardTree();
-    showStatus('Tree explorer ready!');
+  applySettings();
+  await evaluateNode(treeManager.root);
+  lineTagInput.value = treeManager.root.lineTag || '';
+  renderEvalBar(treeManager.root.eval || 0);
+  clearMoveSelection();
+  renderBreadcrumb();
+  refreshPickersAndFilters();
+  await renderVariations();
+  renderTreeJsonView();
+  renderBoardTree();
+  showStatus('Tree explorer ready!');
 });
 
 window.treeManager = treeManager;
-window.app = { navigateToNode, addVariation, goBack, importJsonTree, importLines };
+window.app = { navigateToNode, addVariation, importJsonTree, importLines };

@@ -20,6 +20,7 @@ export class TreeManager {
 
     createChildNode(moveSan, whiteResponse = null, lineTag = null) {
         const game = new Chess(this.currentNode.fen);
+        const beforeFullmove = Number(game.fen().split(' ')[5]);
         const move = game.move(moveSan);
         if (!move) return null;
 
@@ -37,7 +38,7 @@ export class TreeManager {
         const inheritedTag = lineTag || this.currentNode.lineTag || null;
         const newNode = new PositionNode({
             fen: newFen,
-            move: { san: moveSan, ...move },
+            move: { san: moveSan, beforeFullmove, ...move },
             parent: this.currentNode,
             whiteResponse,
             lineTag: inheritedTag
@@ -147,7 +148,7 @@ export class TreeManager {
     _serializeNode(node) {
         return {
             fen: node.fen,
-            move: node.move ? { san: node.move.san } : null,
+            move: node.move ? { san: node.move.san, from: node.move.from, to: node.move.to, color: node.move.color, beforeFullmove: node.move.beforeFullmove } : null,
             eval: node.eval,
             whiteResponse: node.whiteResponse,
             lineTag: node.lineTag,
