@@ -132,6 +132,29 @@ function handleBoardClick(event) {
   }
   clearHighlights();
 }
+function onDrop(source, target) { if (!previewMove(source, target)) { clearHighlights(); return 'snapback'; } return 'drop'; }
+function onSnapEnd() { updateBoard(); }
+function handleBoardClick(event) {
+  const sqEl = event.target.closest('.square-55d63'); if (!sqEl) return;
+  const sq = sqEl.getAttribute('data-square'); if (!sq) return;
+  const game = getCurrentPositionGame();
+  if (selectedSourceSquare) {
+    if (previewMove(selectedSourceSquare, sq)) return;
+    selectedSourceSquare = null;
+  }
+  const piece = game.get(sq);
+  if (piece && piece.color === game.turn()) {
+    selectedSourceSquare = sq;
+    highlightMovesFrom(sq);
+    return;
+  }
+  clearHighlights();
+}
+
+function evaluateNode(node) { return new Promise(resolve => {
+  if (node.eval !== null) return resolve(node.eval);
+  engine.evaluate(node.fen, 14, score => { const n = normalizeEval(score, node.fen); node.setEval(n); resolve(n); });
+}); }
 
 function evaluateNode(node) { return new Promise(resolve => {
   if (node.eval !== null) return resolve(node.eval);
