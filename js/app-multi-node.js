@@ -38,6 +38,7 @@ const importJsonBtn = $('import-json-btn');
 const importLinesBtn = $('import-lines-btn');
 const importPgnBtn = $('import-pgn-btn');
 const exportBtn = $('export-btn');
+const exportSubtreeBtn = $('export-subtree-btn');
 const exportPngBtn = $('export-png-btn');
 const exportJpegBtn = $('export-jpeg-btn');
 const exportPdfBtn = $('export-pdf-btn');
@@ -48,6 +49,7 @@ const nodeSpacingX = $('node-spacing-x');
 const nodeSpacingY = $('node-spacing-y');
 const lastMoveStyleSelect = $('last-move-style');
 const lineHighlightMode = $('line-highlight-mode');
+const wheelModeSelect = $('wheel-mode');
 
 const strategyPickerBtn = $('strategy-picker-btn');
 const tagPickerBtn = $('tag-picker-btn');
@@ -64,6 +66,9 @@ const treeBgInput = $('tree-bg-input');
 const boardThemeSelect = $('board-theme-select');
 const evalFillInput = $('eval-fill-input');
 const evalBgInput = $('eval-bg-input');
+const engineLinesToggle = $('engine-lines-toggle');
+const engineLinesOverlay = $('engine-lines-overlay');
+const boardShell = $('board-shell');
 
 const statusMessage = $('status-message');
 
@@ -75,6 +80,7 @@ let isPanning = false;
 let panStart = null;
 let resizing = false;
 let miniBoards = [];
+let clusterChildFens = new Set();
 
 const board = Chessboard('board', {
   position: START_FEN,
@@ -350,14 +356,9 @@ function renderTreeJsonView() {
 function computeTreeLayout() {
   const levels = [];
   const queue = [{ node: treeManager.root, depth: 0 }];
-  const seenAtDepth = new Map();
 
   while (queue.length) {
     const { node, depth } = queue.shift();
-    const existing = seenAtDepth.get(node.fen);
-    if (existing !== undefined && existing <= depth) continue;
-    seenAtDepth.set(node.fen, depth);
-
     if (!levels[depth]) levels[depth] = [];
     levels[depth].push(node);
     node.children.forEach(child => queue.push({ node: child, depth: depth + 1 }));
@@ -365,37 +366,51 @@ function computeTreeLayout() {
 
   const spacingX = Number(nodeSpacingX.value || 190);
   const spacingY = Number(nodeSpacingY.value || 190);
-  const maxWidth = Math.max(...levels.map(l => l.length));
   const positions = new Map();
 
-  levels.forEach((nodes, depth) => {
-    nodes.forEach((node, idx) => {
-      let x = idx * spacingX;
-      if (treeAlignSelect.value === 'center' || treeAlignSelect.value === 'pyramid') {
-        x += ((maxWidth - nodes.length) * spacingX) / 2;
-      }
-      positions.set(node.fen, { x, y: depth * spacingY });
-    });
-  });
-
   if (treeAlignSelect.value === 'pyramid') {
-    for (let depth = levels.length - 2; depth >= 0; depth--) {
-      for (const node of levels[depth]) {
-        const childPositions = node.children.map(c => positions.get(c.fen)).filter(Boolean);
-        if (childPositions.length) {
-          const avgX = childPositions.reduce((sum, p) => sum + p.x, 0) / childPositions.length;
-          const pos = positions.get(node.fen);
-          positions.set(node.fen, { ...pos, x: avgX });
-        }
+    positions.set(treeManager.root.fen, { x: 0, y: 0 });
+    const levelQueues = [[treeManager.root]];
+    while (levelQueues.length) {
+      const current = levelQueues.shift();
+      const next = [];
+      for (const node of current) {
+        const parentPos = positions.get(node.fen);
+        const children = node.children;
+        const n = children.length;
+        children.forEach((child, idx) => {
+          const offset = (idx - (n - 1) / 2) * spacingX;
+          positions.set(child.fen, { x: parentPos.x + offset, y: parentPos.y + spacingY });
+          next.push(child);
+        });
       }
+      if (next.length) levelQueues.push(next);
     }
+  } else {
+    const maxWidth = Math.max(...levels.map(l => l.length));
+    levels.forEach((nodes, depth) => {
+      nodes.forEach((node, idx) => {
+        let x = idx * spacingX;
+        if (treeAlignSelect.value === 'center') {
+          x += ((maxWidth - nodes.length) * spacingX) / 2;
+        }
+        positions.set(node.fen, { x, y: depth * spacingY });
+      });
+    });
   }
+
+  const allPos = [...positions.values()];
+  const minX = Math.min(...allPos.map(p => p.x));
+  const maxX = Math.max(...allPos.map(p => p.x));
+  const maxY = Math.max(...allPos.map(p => p.y));
+
+  positions.forEach((pos, fen) => positions.set(fen, { x: pos.x - minX + spacingX, y: pos.y }));
 
   return {
     levels,
     positions,
-    width: (maxWidth + 2) * spacingX,
-    height: levels.length * spacingY + 130
+    width: (maxX - minX) + (spacingX * 2),
+    height: maxY + spacingY + 130
   };
 }
 
@@ -452,6 +467,42 @@ function tagColor(tag) {
   return palette[hash % palette.length];
 }
 
+
+function buildClusterChildFen(node) {
+  if (!node?.move?.from || !node?.move?.to || !node.parent) return node.fen;
+  const game = new Chess(node.parent.fen);
+  const mover = game.get(node.move.from);
+  const captured = game.get(node.move.to);
+  if (!mover) return node.fen;
+  const files = "abcdefgh";
+  for (const f of files) {
+    for (let r = 1; r <= 8; r++) game.remove(`${f}${r}`);
+  }
+  game.put({ type: mover.type, color: mover.color }, node.move.from);
+  if (captured) game.put({ type: captured.type, color: captured.color }, node.move.to);
+  game.move({ from: node.move.from, to: node.move.to, promotion: node.move.promotion || 'q' });
+  return game.fen();
+}
+
+function updateEvalBarHeight() {
+  const h = boardShell.getBoundingClientRect().height;
+  document.documentElement.style.setProperty('--eval-bar-height', `${Math.max(120, Math.round(h))}px`);
+}
+
+function renderEngineLines(node) {
+  if (!engineLinesToggle.checked) {
+    engineLinesOverlay.classList.add('hidden');
+    engineLinesOverlay.innerHTML = '';
+    return;
+  }
+  engineLinesOverlay.classList.remove('hidden');
+  engineLinesOverlay.innerHTML = '<div class="engine-lines-loading">Analyzing top lines…</div>';
+  engine.evaluateTopLines(node.fen, 12, 3, (lines) => {
+    if (!engineLinesToggle.checked || node.fen !== treeManager.currentNode.fen) return;
+    engineLinesOverlay.innerHTML = lines.map((line, idx) => `<div>${idx + 1}. ${line.score ?? '?'} | ${line.pv}</div>`).join('');
+  });
+}
+
 function renderBoardTree() {
   clearMiniBoards();
   boardTreeCanvas.innerHTML = '';
@@ -464,11 +515,15 @@ function renderBoardTree() {
   const mode = lineHighlightMode.value;
 
   const clusterByParent = new Map();
+  clusterChildFens = new Set();
   if (clusteringToggle.checked) {
     for (const parentLevel of levels) {
       for (const parent of parentLevel) {
         const clusters = clusterSiblings(parent.children, Number(clusterTopNSelect.value || 2)).filter(c => c.nodes.length > 1);
-        if (clusters.length) clusterByParent.set(parent.fen, clusters);
+        if (clusters.length) {
+          clusterByParent.set(parent.fen, clusters);
+          clusters.forEach(c => c.nodes.forEach(n => clusterChildFens.add(n.fen)));
+        }
       }
     }
   }
@@ -515,9 +570,10 @@ function renderBoardTree() {
       wrapper.onclick = () => navigateToNode(node);
       boardTreeCanvas.appendChild(wrapper);
 
-      miniBoards.push(Chessboard(mini.id, { position: node.fen, draggable: false, showNotation: false }));
+      const fen = clusterChildFens.has(node.fen) ? buildClusterChildFen(node) : node.fen;
+      miniBoards.push(Chessboard(mini.id, { position: fen, draggable: false, showNotation: false }));
 
-      if (node.parent) {
+      if (node.parent && !(clusteringToggle.checked && clusterChildFens.has(node.fen))) {
         const p = positions.get(node.parent.fen);
         if (p) {
           const edge = document.createElement('div');
@@ -601,6 +657,8 @@ async function navigateToNode(node) {
   await renderVariations();
   renderTreeJsonView();
   renderBoardTree();
+  updateEvalBarHeight();
+  renderEngineLines(node);
 }
 
 async function addVariation() {
@@ -643,14 +701,23 @@ async function goBack() {
   await navigateToNode(parent);
 }
 
-function exportTree() {
-  const blob = new Blob([JSON.stringify(treeManager.exportTree(), null, 2)], { type: 'application/json' });
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'opening-tree.json';
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function exportTree() {
+  downloadJson(treeManager.exportTree(), 'opening-tree.json');
+}
+
+function exportSection() {
+  const section = { root: treeManager._serializeNode(treeManager.currentNode) };
+  downloadJson(section, 'opening-section.json');
 }
 
 async function exportTreeImage(type = 'png') {
@@ -713,6 +780,7 @@ async function importPgn() {
 function applySettings() {
   document.body.classList.toggle('theme-dark', themeSelect.value === 'dark');
   document.documentElement.style.setProperty('--tree-bg', treeBgInput.value);
+  boardTreeViewport.style.background = treeBgInput.value;
   document.documentElement.style.setProperty('--eval-fill', evalFillInput.value);
   document.documentElement.style.setProperty('--eval-bg', evalBgInput.value);
 
@@ -745,9 +813,16 @@ function setupPanZoom() {
     boardTreeViewport.classList.remove('panning');
   });
   boardTreeViewport.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    treeScale = Math.max(0.45, Math.min(1.9, treeScale + (e.deltaY < 0 ? 0.08 : -0.08)));
+    const shouldZoom = e.ctrlKey || wheelModeSelect.value === 'zoom';
+    if (shouldZoom) {
+      e.preventDefault();
+      treeScale = Math.max(0.45, Math.min(1.9, treeScale + (e.deltaY < 0 ? 0.08 : -0.08)));
+      applyTreeTransform();
+      return;
+    }
+    treeOffset.y -= e.deltaY;
     applyTreeTransform();
+    e.preventDefault();
   }, { passive: false });
 }
 
@@ -770,6 +845,7 @@ function setupResizer() {
     const boardWidth = Math.max(360, Math.min(650, w - 70));
     boardElement.style.width = `${boardWidth}px`;
     board.resize?.();
+    updateEvalBarHeight();
   });
 
   window.addEventListener('mouseup', () => {
@@ -815,6 +891,7 @@ collapseLeftBtn.addEventListener('click', () => {
 });
 
 exportBtn.addEventListener('click', exportTree);
+exportSubtreeBtn.addEventListener('click', exportSection);
 exportPngBtn.addEventListener('click', () => exportTreeImage('png'));
 exportJpegBtn.addEventListener('click', () => exportTreeImage('jpeg'));
 exportPdfBtn.addEventListener('click', exportTreePdf);
@@ -823,7 +900,7 @@ importLinesBtn.addEventListener('click', importLines);
 importPgnBtn.addEventListener('click', importPgn);
 centerTreeBtn.addEventListener('click', centerTree);
 
-[groupingToggle, clusteringToggle, clusterTopNSelect, blackFilter, whiteFilter, treeAlignSelect, nodeSpacingX, nodeSpacingY, lastMoveStyleSelect, lineHighlightMode].forEach(ctrl => {
+[groupingToggle, clusteringToggle, clusterTopNSelect, blackFilter, whiteFilter, treeAlignSelect, nodeSpacingX, nodeSpacingY, lastMoveStyleSelect, lineHighlightMode, wheelModeSelect].forEach(ctrl => {
   ctrl.addEventListener('change', async () => {
     await renderVariations();
     renderTreeJsonView();
@@ -834,10 +911,11 @@ centerTreeBtn.addEventListener('click', centerTree);
 boardElement.addEventListener('click', handleBoardClick);
 settingsBtn.addEventListener('click', () => settingsDialog.showModal());
 closeSettingsBtn.addEventListener('click', () => settingsDialog.close());
-[themeSelect, treeBgInput, boardThemeSelect, evalFillInput, evalBgInput].forEach(input => {
+[themeSelect, treeBgInput, boardThemeSelect, evalFillInput, evalBgInput, engineLinesToggle].forEach(input => {
   input.addEventListener('input', () => {
     applySettings();
     renderBoardTree();
+    renderEngineLines(treeManager.currentNode);
   });
 });
 
@@ -848,6 +926,7 @@ setupPickers();
 
 document.addEventListener('DOMContentLoaded', async () => {
   applySettings();
+  updateEvalBarHeight();
   await evaluateNode(treeManager.root);
   renderEvalBar(treeManager.root.eval || 0);
   clearMoveSelection();
@@ -856,6 +935,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await renderVariations();
   renderTreeJsonView();
   renderBoardTree();
+  renderEngineLines(treeManager.root);
   showStatus('Tree explorer ready!');
 });
 
