@@ -23,7 +23,10 @@
   <div id="workspace">
     <section id="left-panel">
       <div id="board-section">
-        <div id="board"></div>
+        <div id="board-shell">
+          <div id="board"></div>
+          <div id="engine-lines-overlay" class="hidden"></div>
+        </div>
         <div id="eval-bar-container"><div id="eval-bar"></div></div>
       </div>
 
@@ -62,6 +65,7 @@
           <button id="import-lines-btn" class="btn btn-secondary" type="button">Import Lines</button>
           <button id="import-pgn-btn" class="btn btn-secondary" type="button">Import PGN</button>
           <button id="export-btn" class="btn btn-secondary" type="button">Export JSON</button>
+          <button id="export-subtree-btn" class="btn btn-secondary" type="button">Export Section JSON</button>
           <button id="export-png-btn" class="btn btn-secondary" type="button">PNG</button>
           <button id="export-jpeg-btn" class="btn btn-secondary" type="button">JPEG</button>
           <button id="export-pdf-btn" class="btn btn-secondary" type="button">PDF</button>
@@ -97,6 +101,7 @@
             <label>Spacing Y <input id="node-spacing-y" type="range" min="130" max="260" value="190" /></label>
             <label>Last move <select id="last-move-style"><option value="squares" selected>Squares</option><option value="arrows">Arrows</option></select></label>
             <label>Highlight mode <select id="line-highlight-mode"><option value="full" selected>Full color</option><option value="line">Line highlight</option><option value="tags">Tag colors</option></select></label>
+            <label>Wheel <select id="wheel-mode"><option value="scroll" selected>Vertical scroll</option><option value="zoom">Scroll to zoom</option></select></label>
             <button id="center-tree-btn" class="btn btn-secondary" type="button">Center</button>
             <button id="collapse-left-btn" class="btn btn-secondary" type="button">Collapse Live Panel</button>
           </div>
@@ -114,6 +119,7 @@
       <label>Board colors <select id="board-theme-select"><option value="classic" selected>Classic</option><option value="green">Green</option><option value="blue">Blue</option></select></label>
       <label>Eval fill color <input type="color" id="eval-fill-input" value="#f3e7c9" /></label>
       <label>Eval background <input type="color" id="eval-bg-input" value="#2f2f2f" /></label>
+      <label><input type="checkbox" id="engine-lines-toggle" /> Show top engine lines</label>
       <button id="close-settings-btn" class="btn btn-secondary" type="button">Close</button>
     </form>
   </dialog>
